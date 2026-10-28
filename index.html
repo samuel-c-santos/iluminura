@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="claro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>leitor_md</title>
+<meta name="description" content="Leitor e editor Markdown livre, local e sem dependências.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6feb'/%3E%3Cpath d='M7 22V10h2.6l3.4 5 3.4-5H19v12h-2.4v-7.6L13 20h-.8l-3.4-5.6V22z' fill='%23fff'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<div class="app mode-split sidebar-visible hl-source" id="app">
+
+  <!-- ------------------------------------------------------------ menu -->
+  <header class="menubar">
+    <span class="brand"><span class="dot"></span>leitor_md</span>
+    <nav id="menus" class="menus"></nav>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="btn-toolbar" title="Barra de ferramentas (Ctrl+Shift+T)" aria-label="Barra de ferramentas">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.6" y="2.4" width="12.8" height="3" rx="1"/><path d="M3 9h10M3 12h6.5"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-sidebar" title="Barra lateral (Ctrl+Shift+1)" aria-label="Barra lateral">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.6" y="2.4" width="12.8" height="11.2" rx="1.6"/><path d="M6.1 2.4v11.2"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-focus" title="Modo foco (Ctrl+Shift+F)" aria-label="Modo foco">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.8"/><circle cx="8" cy="8" r="2.1" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-typewriter" title="Modo máquina de escrever" aria-label="Modo máquina de escrever">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.2 4.2h11.6M2.2 11.8h11.6"/><rect x="7" y="6" width="2" height="4" rx="1" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </header>
+
+  <!-- --------------------------------------------------------- toolbar -->
+  <div class="toolbar" id="toolbar">
+    <button data-cmd="h1" title="Título 1 (Ctrl+1)">H1</button>
+    <button data-cmd="h2" title="Título 2 (Ctrl+2)">H2</button>
+    <button data-cmd="h3" title="Título 3 (Ctrl+3)">H3</button>
+    <span class="sep"></span>
+    <button data-cmd="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
+    <button data-cmd="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
+    <button data-cmd="strike" title="Riscado (Alt+Shift+5)"><s>S</s></button>
+    <button data-cmd="highlight" title="Realçado">▮</button>
+    <button data-cmd="code" title="Código (Ctrl+Shift+`)">&lt;/&gt;</button>
+    <button data-cmd="math" title="Fórmula (Ctrl+Shift+M)">∑</button>
+    <span class="sep"></span>
+    <button data-cmd="quote" title="Citação (Ctrl+Shift+Q)">❝</button>
+    <button data-cmd="ul" title="Lista (Ctrl+Shift+U)">•</button>
+    <button data-cmd="ol" title="Lista ordenada (Ctrl+Shift+O)">1.</button>
+    <button data-cmd="task" title="Lista de tarefas (Ctrl+Shift+X)">☑</button>
+    <span class="sep"></span>
+    <button data-cmd="link" title="Link (Ctrl+K)">🔗</button>
+    <button data-cmd="image" title="Imagem (Ctrl+Shift+I)">🖼</button>
+    <button data-cmd="table" title="Tabela (Ctrl+T)">▦</button>
+    <button data-cmd="hr" title="Linha horizontal">—</button>
+    <span class="sep"></span>
+    <button data-cmd="find" title="Localizar (Ctrl+F)">🔍</button>
+  </div>
+
+  <!-- -------------------------------------------------------- workspace -->
+  <div class="workspace">
+
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-tabs">
+        <button data-tab="outline" class="active">Esboço</button>
+        <button data-tab="files">Arquivos</button>
+      </div>
+      <div class="sidebar-body" id="sidebar-body"></div>
+    </aside>
+
+    <div class="panes">
+
+      <section class="pane pane-editor" aria-label="Editor">
+        <div class="editor-wrap" id="editor-wrap">
+          <div id="src-highlight" aria-hidden="true"><div class="inner" id="hl-inner"></div></div>
+          <textarea id="editor" spellcheck="false" autocapitalize="off" autocomplete="off"
+                    aria-label="Código-fonte Markdown"></textarea>
+        </div>
+
+        <div class="findbar" id="findbar">
+          <input id="find-input" type="text" placeholder="Localizar" aria-label="Localizar">
+          <span class="count" id="find-count">0/0</span>
+          <button id="find-prev" title="Anterior (Shift+Enter)">↑</button>
+          <button id="find-next" title="Próximo (Enter)">↓</button>
+          <input id="replace-input" type="text" placeholder="Substituir por" aria-label="Substituir por">
+          <button id="replace-one" title="Substituir">Substituir</button>
+          <button id="replace-all" title="Substituir tudo">Tudo</button>
+          <button id="find-close" title="Fechar (Esc)">✕</button>
+        </div>
+      </section>
+
+      <section class="pane pane-preview" aria-label="Documento renderizado">
+        <div class="preview-scroll" id="preview-scroll">
+          <article class="document" id="preview"></article>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------ status bar -->
+  <footer class="statusbar">
+    <span class="state saved" id="state">pronto</span>
+    <span class="stat" id="stat-words">0 palavras</span>
+    <span class="stat" id="stat-chars">0 caracteres</span>
+    <span class="stat" id="stat-lines">0 linhas</span>
+    <span class="stat" id="stat-reading" title="Tempo estimado de leitura">~0 min</span>
+    <span class="spacer"></span>
+    <label class="stat" title="Velocidade de leitura">
+      <select id="reading-speed" aria-label="Velocidade de leitura">
+        <option value="120">120 ppm</option>
+        <option value="240" selected>240 ppm</option>
+        <option value="382">382 ppm</option>
+      </select>
+    </label>
+    <label class="stat" title="Tema">
+      <select id="theme-select" aria-label="Tema">
+        <option value="claro">Claro</option>
+        <option value="escuro">Escuro</option>
+        <option value="sepia">Sépia</option>
+      </select>
+    </label>
+    <button class="icon-btn" id="btn-zoom-out" title="Reduzir (Ctrl+-)" style="background:none;border:0;color:var(--fg-dim)">A−</button>
+    <span class="stat" id="stat-zoom">100%</span>
+    <button class="icon-btn" id="btn-zoom-in" title="Ampliar (Ctrl+=)" style="background:none;border:0;color:var(--fg-dim)">A+</button>
+  </footer>
+</div>
+
+<!-- ------------------------------------------------------------- modais -->
+<div class="modal-backdrop" id="modal-prefs">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prefs-title">
+    <h2 id="prefs-title">Preferências</h2>
+
+    <div class="setting">
+      <div class="txt">Tema
+        <div class="hint">Aparência do documento e da interface.</div>
+      </div>
+      <select id="pref-theme">
+        <option value="claro">Claro</option>
+        <option value="escuro">Escuro</option>
+        <option value="sepia">Sépia</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <div class="txt">Fonte do documento
+        <div class="hint">Serifada, sem serifa ou monoespaçada.</div>
+      </div>
+      <select id="pref-font">
+        <option value="sans">Sem serifa</option>
+        <option value="serif">Serifada</option>
+        <option value="mono">Monoespaçada</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <div class="txt">Largura do texto
+        <div class="hint">Medida de leitura confortável.</div>
+      </div>
+      <select id="pref-width">
+        <option value="38rem">Estreita</option>
+        <option value="46rem">Média</option>
+        <option value="58rem">Larga</option>
+        <option value="none">Sem limite</option>
+      </select>
+    </div>
+
+    <div class="setting">
+      <div class="txt">Tamanho da fonte
+        <div class="hint">Aplicado ao documento e ao editor.</div>
+      </div>
+      <input id="pref-size" type="number" min="12" max="26" step="1" style="width:64px"> px
+    </div>
+
+    <div class="setting">
+      <div class="txt">Destaque de sintaxe no código-fonte
+        <div class="hint">Colorir Markdown enquanto edita. Desligue se notar desalinhamento.</div>
+      </div>
+      <input class="switch" id="pref-highlight" type="checkbox">
+    </div>
+
+    <div class="setting">
+      <div class="txt">Pareamento automático
+        <div class="hint">Fecha parênteses, colchetes, aspas e marcadores Markdown.</div>
+      </div>
+      <input class="switch" id="pref-autopair" type="checkbox">
+    </div>
+
+    <div class="setting">
+      <div class="txt">Salvamento automático do rascunho
+        <div class="hint">Guarda o texto no navegador para recuperação.</div>
+      </div>
+      <input class="switch" id="pref-autosave" type="checkbox">
+    </div>
+
+    <div class="setting">
+      <div class="txt">Sincronizar rolagem
+        <div class="hint">Mantém editor e pré-visualização alinhados.</div>
+      </div>
+      <input class="switch" id="pref-sync" type="checkbox">
+    </div>
+
+    <div class="setting">
+      <div class="txt">Preservar quebra de linha simples
+        <div class="hint">Uma quebra vira &lt;br&gt; em vez de espaço.</div>
+      </div>
+      <input class="switch" id="pref-linebreak" type="checkbox">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" id="pref-reset">Restaurar padrões</button>
+      <button class="btn primary" id="pref-close">Concluir</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-shortcuts">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sc-title">
+    <h2 id="sc-title">Atalhos</h2>
+    <div class="shortcut-grid" id="shortcut-grid"></div>
+    <div class="modal-actions">
+      <button class="btn primary" data-close="modal-shortcuts">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-about">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ab-title">
+    <h2 id="ab-title">Sobre o leitor_md</h2>
+    <p style="font-size:12.5px;line-height:1.7;color:var(--fg-dim);margin:0 0 10px">
+      Leitor e editor Markdown de código aberto, escrito do zero em JavaScript puro.
+      Sem Electron, sem servidor obrigatório, sem telemetria: o texto nunca sai do seu computador.
+    </p>
+    <p style="font-size:12.5px;line-height:1.7;color:var(--fg-dim);margin:0 0 10px">
+      Licença MIT. Motor Markdown, analisador léxico, realce de sintaxe, temas e interface gráfica implementados de forma autônoma.
+    </p>
+    <p style="font-size:12px;color:var(--fg-faint);margin:0">
+      Versão <span id="app-version">1.0.0</span>
+    </p>
+    <div class="modal-actions">
+      <button class="btn primary" data-close="modal-about">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="drop-overlay" id="drop">Solte para abrir o arquivo</div>
+
+<input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" hidden>
+
+<script src="assets/markdown.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
