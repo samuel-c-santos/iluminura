@@ -1,7 +1,7 @@
 {
   "name": "Iluminura",
   "short_name": "Iluminura",
-  "description": "Editor e leitor Markdown local, com revisão de alterações externas, diagramas Mermaid, exportação e acesso a arquivos do disco.",
+  "description": "Editor e leitor Markdown local, com revisão e fila de alterações externas, diagramas Mermaid, exportação e acesso a arquivos do disco.",
   "lang": "pt-BR",
   "dir": "ltr",
   "start_url": "./",

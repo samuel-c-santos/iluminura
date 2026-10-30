@@ -28,7 +28,7 @@ O sistema pode ser executado através de três métodos:
 
 ### 2.1 Interface e Modos de Operação
 - **Barra de Ferramentas em Faixas**: comandos organizados por contexto (Arquivo, Histórico, Texto, Parágrafo, Inserir e Exibir), no estilo de uma faixa de escritório, com ícones, dicas de atalho e estados ativos.
-- **Barra Lateral Recolhível**: o painel de Esboço, Arquivos e Buscar pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
+- **Barra Lateral Recolhível**: o painel de Esboço, Arquivos, Buscar e Fila pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
 - **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
 - **Busca Global**: a aba Buscar localiza texto e nomes de arquivo em toda a pasta aberta, com busca sem acentos e abertura direta no trecho encontrado.
 - **Instalação PWA**: manifesto e service worker permitem instalar o aplicativo e abri-lo offline após a primeira visita. O cache local é atualizado pela rede quando o servidor está disponível.
@@ -81,13 +81,22 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, os diagramas são renderizados no tema claro e há margens de página, controle de quebras e preservação de cores e blocos de código.
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
 
-### 2.7 Cenário de Uso com Agentes
+### 2.7 Fila de Revisão do Projeto
+- **Monitoramento da Pasta**: ao abrir uma pasta, o leitor indexa os arquivos Markdown e texto e acompanha alterações externas em toda a árvore, com `FileSystemObserver` quando disponível e verificação periódica como alternativa.
+- **Indicador**: a aba Fila exibe a quantidade de arquivos com alterações pendentes.
+- **Itens**: cada item mostra o caminho relativo, o número de trechos, as linhas adicionadas e removidas e o horário da detecção.
+- **Revisão**: clicar em um item abre o arquivo com a versão de base e o diff por trechos. Aplicar ou manter local resolve o item e o remove da fila.
+- **Verificação Manual**: o botão “Verificar agora” refaz a varredura da pasta.
+- **Modos**: em Aplicar automaticamente, as linhas de base avançam sem gerar pendências. Em Revisar antes de aplicar e Não atualizar, as alterações permanecem na fila.
+- **Limites**: 600 arquivos, 2 MB por arquivo, 8 MB de texto total e profundidade 6. Arquivos removidos não geram item de revisão. Arquivos novos são listados como adições.
+
+### 2.8 Cenário de Uso com Agentes
 O fluxo principal do Iluminura é acompanhar documentos alterados por agentes de IA executados no terminal:
 
 1. Abra a pasta do projeto no Iluminura.
 2. Mantenha o aplicativo aberto em uma janela separada ou em outra tela.
 3. Execute o agente no terminal do ambiente de desenvolvimento.
-4. Quando um arquivo mudar, use o aviso de disco e a revisão por trechos para aceitar ou rejeitar as alterações.
+4. Quando um ou mais arquivos mudarem, use a aba Fila para ver os pendentes e a revisão por trechos para aceitar ou rejeitar as alterações.
 5. Use o histórico para restaurar uma versão externa anterior e salve o resultado quando estiver de acordo.
 
 O aplicativo não substitui o terminal nem o agente. Ele oferece a camada visual de leitura, revisão e exportação que falta ao fluxo de edição por linha de comando.
@@ -134,7 +143,7 @@ iluminura/
 │   ├── markdown.js         Analisador sintático, gerador de AST e motor de realce
 │   ├── caminhos.js         Resolução segura de caminhos relativos de imagens
 │   ├── diff.js             Diff de linhas para revisão de alterações externas
-│   ├── app.js              Controlador de estado, manipulação de arquivos e eventos
+│   ├── app.js              Estado, indexação da pasta, revisão e manipulação de arquivos
 │   ├── exportar.js         Geração de pacotes DOCX e EPUB no navegador
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
 │   ├── logo.svg            Identificador visual vetorial
@@ -168,7 +177,7 @@ node testes/e2e/run.js
 
 A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, 15 asserções de resolução de caminhos relativos e 15 asserções do diff de linhas.
 
-O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas e abertura offline. Atualmente são 37 verificações. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
+O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas, fila de revisão do projeto e abertura offline. Atualmente são 40 verificações. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
 
 ---
 
@@ -178,6 +187,7 @@ O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia
 - **Diagramas**: Mermaid é suportado por uma cópia local da biblioteca oficial (aprox. 3,5 MB), carregada sob demanda apenas em documentos com blocos `mermaid`. Outras sintaxes, como PlantUML, permanecem como blocos de código. O tema dos diagramas acompanha a interface.
 - **PWA e Uso Offline**: o service worker exige contexto seguro, como `localhost` ou HTTPS. O aplicativo abre offline após a primeira visita; a biblioteca Mermaid entra no cache depois do primeiro diagrama renderizado. A instalação depende do suporte e das permissões do navegador.
 - **Revisão de Alterações Externas**: o diff é feito por linhas agrupadas em trechos, não por análise semântica do Markdown. Com edições locais pendentes, a revisão é somente leitura e a aplicação do disco exige descarte confirmado. O histórico é local, limitado a 20 versões e 2 MB por documento, e pode ser reduzido se o armazenamento do navegador estiver cheio.
+- **Fila de Revisão do Projeto**: monitora até 600 arquivos, 2 MB por arquivo, 8 MB de texto total e profundidade 6. A fila é recalculada ao abrir a pasta e não representa exclusões de arquivos. No modo automático, as linhas de base avançam sem revisão.
 - **Busca Global**: a varredura da pasta limita a profundidade a 6 níveis e o total a 800 entradas, 24 MB de conteúdo e 150 resultados. Pastas ocultas e `node_modules` são ignoradas.
 - **Exportação DOCX e EPUB**: a conversão preserva a estrutura textual, listas, tabelas, links, blocos de código, imagens e diagramas, mas não reproduz integralmente o CSS da pré-visualização. Fórmulas matemáticas são exportadas como texto e recursos interativos de diagramas não são mantidos.
 - **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.

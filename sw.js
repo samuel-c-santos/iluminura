@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const CACHE = 'iluminura-v1.6.0';
+const CACHE = 'iluminura-v1.7.0';
 const CORE = [
   './',
   './index.html',

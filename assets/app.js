@@ -10,7 +10,7 @@
   var Caminhos = window.LeitorCaminhos;
   var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.6.0';
+  var APP_VERSION = '1.7.0';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -78,6 +78,15 @@
       summary: '',
       truncated: false,
       filesScanned: 0
+    },
+    project: {
+      baseline: new Map(),
+      pending: new Map(),
+      ready: false,
+      scanning: false,
+      scanId: 0,
+      truncated: false,
+      monitored: 0
     }
   };
 
@@ -86,6 +95,9 @@
   var appliedTheme = null;
   var deferredInstallPrompt = null;
   var diskObserver = null;
+  var projectObserver = null;
+  var projectPollTimer = null;
+  var projectScanTimer = null;
 
   window.addEventListener('beforeinstallprompt', function (e) {
     e.preventDefault();
@@ -971,6 +983,7 @@
     state.diskNoticeStamp = null;
     state.diskConflict = false;
     hideDiskNotice();
+    if (state.docPath) setProjectBaseline(state.docPath, text, state.diskStamp, handle || state.handle, state.name);
 
     var max = editor.value.length;
     editor.setSelectionRange(Math.min(selStart, max), Math.min(selEnd, max));
@@ -991,6 +1004,13 @@
     state.diskNoticeStamp = null;
     state.diskConflict = false;
     hideDiskNotice();
+
+    if (state.docPath) {
+      try {
+        var diskText = await snap.file.text();
+        setProjectBaseline(state.docPath, diskText, state.diskStamp, snap.handle, state.name);
+      } catch (e) { /* mantém a linha de base anterior */ }
+    }
   }
 
   async function checkDiskChange(forceCompare) {
@@ -1282,6 +1302,7 @@
       remoteFile: snap.file,
       remoteHandle: snap.handle,
       remoteStamp: stamp,
+      queuePath: state.docPath || null,
       hunks: hunks,
       dirty: localText !== baseText,
       history: getDiskHistory()
@@ -1337,6 +1358,7 @@
 
     var merged = Diff.merge(review.baseText, review.hunks, accepted);
     applyReviewedText(merged, review.remoteText, review.remoteFile, review.remoteStamp);
+    resolveReviewProject(review);
     closeModal('modal-review');
     toast(merged === review.remoteText ? 'Versão do disco aplicada.' : 'Trechos selecionados aplicados.');
   }
@@ -1349,6 +1371,7 @@
     state.diskNoticeStamp = state.diskStamp;
     state.diskConflict = true;
     hideDiskNotice();
+    resolveReviewProject(review);
     closeModal('modal-review');
     toast('Versão externa mantida para revisão. Salvar substitui o disco.');
   }
@@ -1387,6 +1410,7 @@
     pushHistory();
     saveDraftNow();
 
+    resolveReviewProject(review);
     closeModal('modal-review');
     toast('Versão externa restaurada no editor.');
   }
@@ -1652,6 +1676,7 @@
       state.diskStamp = stampOf(file);
       state.diskNoticeStamp = null;
       hideDiskNotice();
+      if (docPath) setProjectBaseline(docPath, text, state.diskStamp, handle, file.name);
       addRecent(file.name, text);
       toast('Aberto: ' + file.name);
     } catch (err) {
@@ -1766,6 +1791,8 @@
       state.search.results = [];
       state.search.filesScanned = 0;
       state.search.truncated = false;
+      resetProjectState();
+      initProjectBaseline();
       switchTab('files');
 
       var bind = !!bindCurrent || (!state.docPath && hasRelativeImages());
@@ -2017,6 +2044,7 @@
     saveAs: function () { saveDocument(true); },
     reloadDisk: function () { reloadFromDisk(false); },
     reviewDisk: function () { openReview(); },
+    projectQueue: projectQueue,
     exportHtml: exportHtml,
     exportPdf: function () { printDocument(); },
     exportDocx: function () { exportOffice('docx'); },
@@ -2306,6 +2334,7 @@
           { label: 'Salvar como…', key: 'Ctrl+Shift+S', cmd: 'saveAs' },
           { label: 'Atualizar do disco', key: 'F5', cmd: 'reloadDisk' },
           { label: 'Revisar alterações externas', cmd: 'reviewDisk' },
+          { label: 'Fila de revisão do projeto', cmd: 'projectQueue' },
           { sep: true },
           { label: 'Exportar como HTML', cmd: 'exportHtml' },
           { label: 'Exportar como DOCX', cmd: 'exportDocx' },
@@ -2490,7 +2519,8 @@
     });
     if (tab === 'outline') buildOutline();
     else if (tab === 'files') renderFiles();
-    else renderSearch();
+    else if (tab === 'search') renderSearch();
+    else renderReviewQueue();
 
     if (tab === 'search') {
       var input = $('#global-search-input');
@@ -2508,7 +2538,8 @@
   function renderSidebar() {
     if (state.openTab === 'outline') buildOutline();
     else if (state.openTab === 'files') renderFiles();
-    else renderSearch();
+    else if (state.openTab === 'search') renderSearch();
+    else renderReviewQueue();
   }
 
   function wireSidebar() {
@@ -2538,6 +2569,17 @@
 
       if (btn.dataset.act === 'search-result') {
         openSearchResult(Number(btn.dataset.i));
+        return;
+      }
+
+      if (btn.dataset.act === 'project-rescan') {
+        if (!state.project.ready) initProjectBaseline();
+        else scanProjectChanges(true);
+        return;
+      }
+
+      if (btn.dataset.act === 'project-review') {
+        openProjectReview(btn.dataset.path);
         return;
       }
 
@@ -2963,6 +3005,474 @@
       input.focus();
       input.select();
     }
+  }
+
+  /* ------------------------------------------- fila de revisão do projeto -- */
+
+  var PROJECT_MAX_FILES = 600;
+  var PROJECT_MAX_FILE = 2 * 1024 * 1024;
+  var PROJECT_MAX_TEXT = 8 * 1024 * 1024;
+
+  function resetProjectState() {
+    state.project.baseline = new Map();
+    state.project.pending = new Map();
+    state.project.ready = false;
+    state.project.scanning = false;
+    state.project.truncated = false;
+    state.project.monitored = 0;
+    state.project.scanId++;
+    clearTimeout(projectScanTimer);
+    projectScanTimer = null;
+    updateReviewBadge();
+  }
+
+  function updateReviewBadge() {
+    var badge = $('#review-count');
+    if (!badge) return;
+
+    var count = state.project.pending.size;
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.hidden = count === 0;
+  }
+
+  function refreshProjectUI() {
+    updateReviewBadge();
+    if (state.openTab === 'reviews') renderReviewQueue();
+  }
+
+  function projectItemStats(item) {
+    var added = 0;
+    var removed = 0;
+
+    (item.hunks || []).forEach(function (hunk) {
+      added += hunk.remoteLines.length;
+      removed += hunk.baseLines.length;
+    });
+
+    return { added: added, removed: removed };
+  }
+
+  function renderReviewQueue() {
+    var body = $('#sidebar-body');
+    if (!body) return;
+
+    var items = Array.from(state.project.pending.values()).sort(function (a, b) {
+      return b.at - a.at;
+    });
+
+    var status = '';
+    var list = '';
+
+    if (!state.dirHandle) {
+      status = '';
+      list = '<div class="search-empty">Abra uma pasta para acompanhar as alterações do projeto.' +
+        '<br><button type="button" class="search-action" data-act="open-folder">Abrir pasta</button></div>';
+    } else if (state.project.scanning && !state.project.ready) {
+      status = 'Indexando projeto...';
+    } else if (state.project.scanning) {
+      status = 'Verificando alterações...';
+    } else if (!items.length) {
+      status = state.project.monitored + ' arquivo' + (state.project.monitored === 1 ? '' : 's') +
+        ' monitorado' + (state.project.monitored === 1 ? '' : 's') + '. Nenhuma alteração pendente.';
+    } else {
+      status = items.length + ' arquivo' + (items.length === 1 ? '' : 's') +
+        ' com alterações pendentes.';
+    }
+
+    if (state.project.truncated) status += ' Monitoramento limitado.';
+
+    if (state.project.ready || state.project.scanning) {
+      list = items.map(function (item) {
+        var stats = projectItemStats(item);
+        var counts = item.hunks && item.hunks.length
+          ? (stats.added ? '+' + stats.added + ' ' : '') + (stats.removed ? '-' + stats.removed : '')
+          : 'alteração detectada';
+        var summary = item.hunks && item.hunks.length
+          ? item.hunks.length + ' trecho' + (item.hunks.length === 1 ? '' : 's')
+          : 'revisar';
+
+        return '<button type="button" class="search-result project-change" data-act="project-review" data-path="' +
+          escapeHtml(item.path) + '">' +
+          '<span class="search-result-head"><span>' + escapeHtml(item.name) + '</span><span>' + summary + '</span></span>' +
+          (item.path !== item.name
+            ? '<span class="search-result-path">' + escapeHtml(item.path) + '</span>'
+            : '') +
+          '<span class="project-change-stats">' + counts + ' | ' + escapeHtml(formatHistoryTime(item.at)) + '</span>' +
+          '</button>';
+      }).join('');
+    }
+
+    body.innerHTML = '<div class="review-queue">' +
+      '<div class="review-queue-head">' +
+      '<span class="review-queue-title">Fila de revisão</span>' +
+      '<button type="button" class="search-action" data-act="project-rescan"' +
+      (state.project.scanning ? ' disabled' : '') + '>Verificar agora</button>' +
+      '</div>' +
+      '<div class="sidebar-search-status">' + escapeHtml(status) + '</div>' +
+      '<div class="review-queue-list">' + list + '</div>' +
+      '</div>';
+
+    updateReviewBadge();
+  }
+
+  async function collectProjectFiles(root, base, depth, budget, out) {
+    if (depth > 6 || budget.visited >= PROJECT_MAX_FILES * 2 || out.length >= PROJECT_MAX_FILES) {
+      state.project.truncated = true;
+      return;
+    }
+
+    var entries = [];
+    try {
+      for await (var entry of root.values()) entries.push(entry);
+    } catch (e) {
+      return;
+    }
+
+    for (var i = 0; i < entries.length; i++) {
+      if (out.length >= PROJECT_MAX_FILES || budget.visited >= PROJECT_MAX_FILES * 2) {
+        state.project.truncated = true;
+        return;
+      }
+
+      var item = entries[i];
+      if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+
+      budget.visited++;
+      var path = base ? base + '/' + item.name : item.name;
+
+      if (item.kind === 'file') {
+        if (/\.(md|markdown|mdown|mkd|txt)$/i.test(item.name)) {
+          out.push({ handle: item, path: path, name: item.name });
+        }
+      } else if (item.kind === 'directory') {
+        await collectProjectFiles(item, path, depth + 1, budget, out);
+      }
+    }
+  }
+
+  async function initProjectBaseline() {
+    if (!state.dirHandle) {
+      resetProjectState();
+      refreshProjectUI();
+      return;
+    }
+
+    stopProjectWatch();
+
+    var scanId = ++state.project.scanId;
+    state.project.scanning = true;
+    state.project.ready = false;
+    state.project.truncated = false;
+    state.project.baseline = new Map();
+    state.project.pending = new Map();
+    state.project.monitored = 0;
+    refreshProjectUI();
+
+    var files = [];
+    var budget = { visited: 0 };
+
+    try {
+      await collectProjectFiles(state.dirHandle, '', 0, budget, files);
+    } catch (e) { /* mantém o que foi possível indexar */ }
+
+    var total = 0;
+
+    for (var i = 0; i < files.length; i++) {
+      if (scanId !== state.project.scanId) return;
+
+      var item = files[i];
+      var file;
+
+      try {
+        file = await item.handle.getFile();
+      } catch (e) {
+        continue;
+      }
+
+      if (file.size > PROJECT_MAX_FILE) {
+        state.project.truncated = true;
+        continue;
+      }
+
+      if (total + file.size > PROJECT_MAX_TEXT) {
+        state.project.truncated = true;
+        break;
+      }
+
+      var text;
+      try {
+        text = await file.text();
+      } catch (e) {
+        continue;
+      }
+
+      total += file.size;
+      state.project.baseline.set(item.path, {
+        handle: item.handle,
+        name: item.name,
+        path: item.path,
+        stamp: stampOf(file),
+        text: text
+      });
+    }
+
+    if (scanId !== state.project.scanId) return;
+
+    state.project.scanning = false;
+    state.project.ready = true;
+    state.project.monitored = state.project.baseline.size;
+    startProjectWatch();
+    refreshProjectUI();
+  }
+
+  async function scanProjectChanges(force) {
+    if (!state.dirHandle || !state.project.ready || state.project.scanning) return;
+
+    var scanId = state.project.scanId;
+    state.project.scanning = true;
+    state.project.truncated = false;
+    refreshProjectUI();
+
+    var files = [];
+    var budget = { visited: 0 };
+
+    try {
+      await collectProjectFiles(state.dirHandle, '', 0, budget, files);
+
+      if (scanId !== state.project.scanId) return;
+
+      var baseline = state.project.baseline;
+      var pending = state.project.pending;
+      var autoMode = state.prefs.externalMode === 'auto';
+      var seen = new Set();
+
+      for (var i = 0; i < files.length; i++) {
+        if (scanId !== state.project.scanId) return;
+
+        var item = files[i];
+        var file;
+
+        try {
+          file = await item.handle.getFile();
+        } catch (e) {
+          continue;
+        }
+
+        seen.add(item.path);
+
+        var base = baseline.get(item.path);
+        var stamp = stampOf(file);
+
+        if (!base) {
+          if (file.size > PROJECT_MAX_FILE) {
+            state.project.truncated = true;
+            continue;
+          }
+
+          var newText;
+          try {
+            newText = await file.text();
+          } catch (e) {
+            continue;
+          }
+
+          if (autoMode) {
+            baseline.set(item.path, {
+              handle: item.handle,
+              name: item.name,
+              path: item.path,
+              stamp: stamp,
+              text: newText
+            });
+            pending.delete(item.path);
+            continue;
+          }
+
+          if (!newText.trim()) continue;
+
+          var newHunks = Diff ? Diff.hunks('', newText) : [];
+          if (!newHunks.length) continue;
+
+          var previous = pending.get(item.path);
+          pending.set(item.path, {
+            handle: item.handle,
+            name: item.name,
+            path: item.path,
+            baseText: '',
+            remoteText: newText,
+            stamp: stamp,
+            hunks: newHunks,
+            at: previous ? previous.at : Date.now()
+          });
+          continue;
+        }
+
+        if (stamp === base.stamp) continue;
+
+        if (file.size > PROJECT_MAX_FILE) {
+          state.project.truncated = true;
+          if (autoMode) base.stamp = stamp;
+          continue;
+        }
+
+        var text;
+        try {
+          text = await file.text();
+        } catch (e) {
+          continue;
+        }
+
+        if (text === base.text) {
+          base.stamp = stamp;
+          pending.delete(item.path);
+          continue;
+        }
+
+        if (autoMode) {
+          base.stamp = stamp;
+          base.text = text;
+          pending.delete(item.path);
+          continue;
+        }
+
+        var hunks = Diff ? Diff.hunks(base.text, text) : [];
+        var current = pending.get(item.path);
+
+        pending.set(item.path, {
+          handle: item.handle,
+          name: item.name,
+          path: item.path,
+          baseText: base.text,
+          remoteText: text,
+          stamp: stamp,
+          hunks: hunks,
+          at: current ? current.at : Date.now()
+        });
+      }
+
+      Array.from(baseline.keys()).forEach(function (path) {
+        if (!seen.has(path)) {
+          baseline.delete(path);
+          pending.delete(path);
+        }
+      });
+
+      Array.from(pending.keys()).forEach(function (path) {
+        if (!seen.has(path)) pending.delete(path);
+      });
+    } finally {
+      if (scanId === state.project.scanId) {
+        state.project.scanning = false;
+        state.project.monitored = state.project.baseline.size;
+        refreshProjectUI();
+      }
+    }
+  }
+
+  function scheduleProjectScan() {
+    clearTimeout(projectScanTimer);
+    projectScanTimer = setTimeout(function () {
+      projectScanTimer = null;
+      scanProjectChanges();
+    }, 300);
+  }
+
+  function startProjectWatch() {
+    stopProjectWatch();
+    if (!state.dirHandle) return;
+
+    if (typeof window.FileSystemObserver === 'function') {
+      try {
+        projectObserver = new window.FileSystemObserver(function () {
+          scheduleProjectScan();
+        });
+        var observing = projectObserver.observe(state.dirHandle, { recursive: true });
+        if (observing && typeof observing.catch === 'function') observing.catch(function () {});
+      } catch (e) {
+        projectObserver = null;
+      }
+    }
+
+    projectPollTimer = setInterval(function () {
+      if (document.visibilityState === 'visible') scanProjectChanges();
+    }, 5000);
+  }
+
+  function stopProjectWatch() {
+    if (projectPollTimer) {
+      clearInterval(projectPollTimer);
+      projectPollTimer = null;
+    }
+    if (projectScanTimer) {
+      clearTimeout(projectScanTimer);
+      projectScanTimer = null;
+    }
+    if (projectObserver) {
+      try { projectObserver.disconnect(); } catch (e) {}
+      projectObserver = null;
+    }
+  }
+
+  function setProjectBaseline(path, text, stamp, handle, name) {
+    if (!state.dirHandle || !path) return;
+
+    var base = state.project.baseline.get(path) || {
+      path: path,
+      name: name || path.split('/').pop()
+    };
+
+    if (handle) base.handle = handle;
+    if (name) base.name = name;
+    base.path = path;
+    base.stamp = stamp;
+    base.text = text;
+
+    state.project.baseline.set(path, base);
+    state.project.pending.delete(path);
+    state.project.monitored = state.project.baseline.size;
+    refreshProjectUI();
+  }
+
+  function resolveReviewProject(review) {
+    if (!review || !review.queuePath) return;
+
+    setProjectBaseline(
+      review.queuePath,
+      review.remoteText,
+      review.remoteStamp,
+      review.remoteHandle,
+      review.remoteHandle ? review.remoteHandle.name : state.name
+    );
+  }
+
+  async function openProjectReview(path) {
+    var item = state.project.pending.get(path);
+    if (!item) return;
+
+    if (state.docPath === path && state.handle) {
+      openReview();
+      return;
+    }
+
+    if (!confirmDiscard()) return;
+
+    var file;
+    try {
+      file = await item.handle.getFile();
+    } catch (e) {
+      toast('Não foi possível abrir o arquivo.');
+      return;
+    }
+
+    setDoc(item.baseText, item.name, item.handle, item.path);
+    state.diskStamp = stampOf(file);
+    state.diskConflict = true;
+    openReview();
+  }
+
+  function projectQueue() {
+    if (!state.prefs.sidebar) setPref('sidebar', true);
+    switchTab('reviews');
   }
 
 
@@ -4008,9 +4518,15 @@
       restoreReviewHistory(Number(button.dataset.reviewHistory));
     });
 
-    window.addEventListener('focus', function () { checkDiskChange(); });
+    window.addEventListener('focus', function () {
+      checkDiskChange();
+      if (state.project.ready) scheduleProjectScan();
+    });
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') checkDiskChange();
+      if (document.visibilityState === 'visible') {
+        checkDiskChange();
+        if (state.project.ready) scheduleProjectScan();
+      }
     });
 
     document.addEventListener('fullscreenchange', syncToolbarState);
@@ -4050,6 +4566,7 @@
       var mode = e.target.value;
       setPref('externalMode', mode);
       if (mode !== 'off') checkDiskChange(true);
+      if (state.project.ready) scanProjectChanges(true);
 
       var messages = {
         review: 'Revisão antes de aplicar ativada.',

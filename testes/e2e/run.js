@@ -291,7 +291,7 @@ async function main() {
 
     check('título com Iluminura', boot.title.endsWith('Iluminura'), boot.title);
     check('marca Iluminura', boot.brand === 'Iluminura', boot.brand);
-    check('versão 1.6.0', boot.version === '1.6.0', boot.version);
+    check('versão 1.7.0', boot.version === '1.7.0', boot.version);
     check('manifesto PWA', !!boot.manifest && boot.manifest.endsWith('/manifest.webmanifest'), boot.manifest);
     check('editor e pré-visualização', boot.editor && boot.preview);
 
@@ -547,9 +547,12 @@ async function main() {
       .replace('Parágrafo A original.', 'Parágrafo A novo.')
       .replace('Parágrafo B original.', 'Parágrafo B novo.');
 
-    const writeOpfs = (text) => evaluate(`(async () => {
-      const root = await navigator.storage.getDirectory();
-      const handle = await root.getFileHandle('artigo.md', { create: true });
+    const writeOpfs = (text, filePath) => evaluate(`(async () => {
+      const parts = ${JSON.stringify(filePath || 'artigo.md')}.split('/');
+      const name = parts.pop();
+      let dir = await navigator.storage.getDirectory();
+      for (const part of parts) dir = await dir.getDirectoryHandle(part, { create: true });
+      const handle = await dir.getFileHandle(name, { create: true });
       const writable = await handle.createWritable();
       await writable.write(${JSON.stringify(text)});
       await writable.close();
@@ -629,7 +632,72 @@ async function main() {
     check('histórico externo registrado', reviewHistory.length > 0 &&
       reviewHistory[0] >= 1, JSON.stringify(reviewHistory));
 
-    console.log('\n[7] PWA offline');
+    console.log('\n[7] Fila de revisão do projeto');
+
+    await writeOpfs('# A\n\nTexto A.\n', 'a.md');
+    await writeOpfs('Texto C.\n', 'sub/c.txt');
+
+    await evaluate(`document.querySelector('.sidebar-tabs button[data-tab="reviews"]').click()`);
+    await sleep(300);
+
+    const projectQueue = await waitFor(() => evaluate(`(() => {
+      const badge = document.querySelector('#review-count');
+      const items = [...document.querySelectorAll('.project-change')].map((button) => button.dataset.path);
+      return items.length === 2 ? {
+        badgeHidden: badge ? badge.hidden : null,
+        badgeText: badge ? badge.textContent : null,
+        items: items
+      } : null;
+    })()`), 15000);
+
+    check('fila reúne os arquivos alterados', !!projectQueue &&
+      projectQueue.badgeHidden === false && projectQueue.badgeText === '2' &&
+      projectQueue.items.includes('a.md') && projectQueue.items.includes('sub/c.txt'),
+      JSON.stringify(projectQueue));
+
+    await evaluate(`document.querySelector('.project-change[data-path="a.md"]').click()`);
+    await sleep(700);
+    const projectReview = await evaluate(`(() => ({
+      open: document.querySelector('#modal-review').classList.contains('on'),
+      editor: document.querySelector('#editor').value,
+      hunks: document.querySelectorAll('.review-hunk').length
+    }))()`);
+    check('fila abre o arquivo e o diff', projectReview.open && projectReview.editor === '' &&
+      projectReview.hunks === 1, JSON.stringify(projectReview));
+
+    await evaluate(`document.querySelector('#review-apply').click()`);
+    await sleep(700);
+    const projectAfter = await evaluate(`(() => {
+      const badge = document.querySelector('#review-count');
+      return {
+        badgeHidden: badge.hidden,
+        badgeText: badge.textContent,
+        items: [...document.querySelectorAll('.project-change')].map((button) => button.dataset.path),
+        editor: document.querySelector('#editor').value
+      };
+    })()`);
+    check('aplicar resolve o item da fila', projectAfter.badgeHidden === false &&
+      projectAfter.badgeText === '1' && projectAfter.items.includes('sub/c.txt') &&
+      !projectAfter.items.includes('a.md') && projectAfter.editor.includes('Texto A.'),
+      JSON.stringify(projectAfter));
+
+    await evaluate(`document.querySelector('.sidebar-tabs button[data-tab="files"]').click()`);
+    await sleep(200);
+    await evaluate(`(() => {
+      const row = [...document.querySelectorAll('#sidebar-body .file-row')]
+        .find((button) => button.textContent.includes('artigo.md'));
+      if (row) row.click();
+      return !!row;
+    })()`);
+    await sleep(1000);
+    await evaluate(`(() => {
+      const editor = document.querySelector('#editor');
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(1000);
+
+    console.log('\n[8] PWA offline');
     await evaluate(`navigator.serviceWorker.ready`);
     await send('Network.emulateNetworkConditions', {
       offline: true,
