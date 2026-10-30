@@ -64,12 +64,13 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **Diagnóstico Visual**: imagens ausentes recebem um espaço reservado com o nome do arquivo, e um aviso acionável indica quantas não foram carregadas.
 - **Exportação Autônoma**: imagens resolvidas são embutidas em Base64 no HTML exportado, produzindo um arquivo único e portátil.
 
-### 2.5 Sincronização com Alterações Externas
-- **Atualização Automática**: enquanto o documento está vinculado ao disco, o leitor detecta alterações feitas por outros programas, como agentes de IA, e recarrega o conteúdo quando não há edições locais pendentes.
-- **Proteção contra Sobrescrita**: se existirem alterações não salvas no editor, o texto local é preservado e um aviso oferece a recarga explícita do arquivo. Ao salvar com uma versão externa pendente, o leitor pede confirmação antes de substituí-la.
-- **Atualização Manual**: o botão “Atualizar do disco” na faixa Arquivo e a tecla `F5` releem o arquivo a qualquer momento.
-- **Detecção**: utiliza `FileSystemObserver` quando disponível, com verificação periódica de baixo custo como alternativa, inclusive ao retornar o foco para a janela.
-- **Preferência**: a atualização automática pode ser desativada no painel de Preferências.
+### 2.5 Revisão de Alterações Externas
+- **Detecção**: enquanto o documento está vinculado ao disco, o leitor observa alterações feitas por outros programas, como agentes de IA, usando `FileSystemObserver` quando disponível, verificação periódica e checagem ao retornar o foco para a janela.
+- **Modos**: a preferência de alterações externas oferece três opções: revisar antes de aplicar (padrão), aplicar automaticamente ou não atualizar.
+- **Revisão por Trecho**: o aviso “Revisar alterações” abre um diff de linhas agrupado em trechos. Cada trecho pode ser aceito ou rejeitado individualmente antes da aplicação.
+- **Proteção Local**: quando existem edições não salvas, o diff é somente leitura. Carregar o disco descarta essas edições após confirmação, e salvar com uma versão externa pendente também pede confirmação.
+- **Histórico**: versões externas são registradas no armazenamento local, com limite de 20 versões e 2 MB por documento. Uma versão anterior pode ser restaurada no editor como alteração local.
+- **Atualização Manual**: o menu Arquivo, o botão Revisar na faixa e o aviso de disco abrem a revisão. A tecla `F5` continua executando a recarga direta do arquivo.
 
 ### 2.6 Exportação
 - **HTML Autônomo**: Documento compilado contendo folhas de estilo, imagens embutidas (codificação Base64) e diagramas Mermaid já convertidos em SVG.
@@ -119,6 +120,7 @@ iluminura/
 ├── assets/
 │   ├── markdown.js         Analisador sintático, gerador de AST e motor de realce
 │   ├── caminhos.js         Resolução segura de caminhos relativos de imagens
+│   ├── diff.js             Diff de linhas para revisão de alterações externas
 │   ├── app.js              Controlador de estado, manipulação de arquivos e eventos
 │   ├── exportar.js         Geração de pacotes DOCX e EPUB no navegador
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
@@ -133,6 +135,7 @@ iluminura/
 ├── testes/
 │   ├── markdown.test.js    Suíte de testes automatizados do analisador
 │   ├── caminhos.test.js    Testes de resolução de caminhos relativos
+│   ├── diff.test.js        Testes do diff de linhas
 │   └── e2e/run.js          Testes de integração no navegador
 └── LICENSE                 Termos da licença MIT
 ```
@@ -146,12 +149,13 @@ A integridade do motor de análise léxica e sintática é validada por meio de 
 ```bash
 node testes/markdown.test.js
 node testes/caminhos.test.js
+node testes/diff.test.js
 node testes/e2e/run.js
 ```
 
-A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
+A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, 15 asserções de resolução de caminhos relativos e 15 asserções do diff de linhas.
 
-O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão e abertura offline. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
+O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas e abertura offline. Atualmente são 37 verificações. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
 
 ---
 
@@ -160,6 +164,7 @@ O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia
 - **Modelo de Visualização**: A interface utiliza arquitetura de painel duplo (editor de texto e painel de renderização) ou visualização alternada, não empregando edição direta *in-place* no documento renderizado.
 - **Diagramas**: Mermaid é suportado por uma cópia local da biblioteca oficial (aprox. 3,5 MB), carregada sob demanda apenas em documentos com blocos `mermaid`. Outras sintaxes, como PlantUML, permanecem como blocos de código. O tema dos diagramas acompanha a interface.
 - **PWA e Uso Offline**: o service worker exige contexto seguro, como `localhost` ou HTTPS. O aplicativo abre offline após a primeira visita; a biblioteca Mermaid entra no cache depois do primeiro diagrama renderizado. A instalação depende do suporte e das permissões do navegador.
+- **Revisão de Alterações Externas**: o diff é feito por linhas agrupadas em trechos, não por análise semântica do Markdown. Com edições locais pendentes, a revisão é somente leitura e a aplicação do disco exige descarte confirmado. O histórico é local, limitado a 20 versões e 2 MB por documento, e pode ser reduzido se o armazenamento do navegador estiver cheio.
 - **Busca Global**: a varredura da pasta limita a profundidade a 6 níveis e o total a 800 entradas, 24 MB de conteúdo e 150 resultados. Pastas ocultas e `node_modules` são ignoradas.
 - **Exportação DOCX e EPUB**: a conversão preserva a estrutura textual, listas, tabelas, links, blocos de código, imagens e diagramas, mas não reproduz integralmente o CSS da pré-visualização. Fórmulas matemáticas são exportadas como texto e recursos interativos de diagramas não são mantidos.
 - **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.

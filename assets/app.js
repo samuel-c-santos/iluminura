@@ -8,12 +8,14 @@
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var Caminhos = window.LeitorCaminhos;
+  var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.5.0';
+  var APP_VERSION = '1.6.0';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
   var LS_RECENT = 'leitormd.recent.v1';
+  var LS_DISK_HISTORY = 'iluminura.disk.history.v1';
 
   var DEFAULTS = {
     theme: 'claro',
@@ -23,7 +25,7 @@
     highlight: true,
     autopair: true,
     autosave: true,
-    autoReload: true,
+    externalMode: 'review',
     sync: true,
     hardBreak: false,
     mode: 'split',
@@ -59,6 +61,8 @@
     diskNoticeKind: null,
     diskNoticeStamp: null,
     diskConflict: false,
+    diskHistory: null,
+    review: null,
     saving: false,
     dirty: false,
     headings: [],
@@ -102,7 +106,20 @@
   function loadPrefs() {
     try {
       var raw = localStorage.getItem(LS_PREFS);
-      if (raw) state.prefs = Object.assign({}, DEFAULTS, JSON.parse(raw));
+      if (raw) {
+        var saved = JSON.parse(raw);
+        state.prefs = Object.assign({}, DEFAULTS, saved);
+
+        if (!saved.externalMode) {
+          state.prefs.externalMode = saved.autoReload === false ? 'off' : 'review';
+        }
+
+        if (['review', 'auto', 'off'].indexOf(state.prefs.externalMode) === -1) {
+          state.prefs.externalMode = 'review';
+        }
+
+        delete state.prefs.autoReload;
+      }
     } catch (e) { /* armazenamento indisponível */ }
   }
 
@@ -145,7 +162,7 @@
     $('#pref-highlight').checked = p.highlight;
     $('#pref-autopair').checked = p.autopair;
     $('#pref-autosave').checked = p.autosave;
-    $('#pref-autoreload').checked = p.autoReload;
+    $('#pref-external-mode').value = p.externalMode;
     $('#pref-sync').checked = p.sync;
     $('#pref-linebreak').checked = p.hardBreak;
     $('#reading-speed').value = String(p.speed);
@@ -220,6 +237,8 @@
     state.diskNoticeKind = null;
     state.diskNoticeStamp = null;
     state.diskConflict = false;
+    state.diskHistory = null;
+    state.review = null;
     state.saving = false;
     if (name) state.name = name;
     editor.value = text;
@@ -806,6 +825,112 @@
     if (notice) notice.hidden = true;
   }
 
+  /* ------------------------------------------- histórico de versões -- */
+
+  function diskHistoryKey() {
+    return state.docPath || state.name || 'documento';
+  }
+
+  function loadDiskHistoryMap() {
+    try {
+      var raw = localStorage.getItem(LS_DISK_HISTORY);
+      var parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveDiskHistoryMap(map) {
+    try {
+      localStorage.setItem(LS_DISK_HISTORY, JSON.stringify(map));
+    } catch (e) {
+      /* quota indisponível: o histórico da sessão continua em memória */
+    }
+  }
+
+  function trimDiskHistoryMap(map) {
+    var total = 0;
+
+    Object.keys(map).forEach(function (key) {
+      if (!Array.isArray(map[key])) {
+        delete map[key];
+        return;
+      }
+      map[key].forEach(function (entry) { total += entry.text.length; });
+    });
+
+    while (total > 3000000) {
+      var oldestKey = null;
+      var oldestIndex = -1;
+      var oldestAt = Infinity;
+
+      Object.keys(map).forEach(function (key) {
+        map[key].forEach(function (entry, index) {
+          if (entry.at < oldestAt) {
+            oldestAt = entry.at;
+            oldestKey = key;
+            oldestIndex = index;
+          }
+        });
+      });
+
+      if (!oldestKey) break;
+
+      total -= map[oldestKey][oldestIndex].text.length;
+      map[oldestKey].splice(oldestIndex, 1);
+      if (!map[oldestKey].length) delete map[oldestKey];
+    }
+  }
+
+  function recordDiskVersion(text, stamp) {
+    var key = diskHistoryKey();
+    var map = loadDiskHistoryMap();
+    var list = Array.isArray(map[key]) ? map[key] : [];
+
+    if (list.some(function (entry) { return entry.stamp === stamp; })) {
+      state.diskHistory = list;
+      return;
+    }
+
+    list.unshift({
+      at: Date.now(),
+      stamp: stamp,
+      text: text
+    });
+
+    var chars = 0;
+    list = list.filter(function (entry, index) {
+      if (index >= 20) return false;
+      chars += entry.text.length;
+      return index === 0 || chars <= 2000000;
+    });
+
+    map[key] = list;
+    trimDiskHistoryMap(map);
+    saveDiskHistoryMap(map);
+    state.diskHistory = list;
+  }
+
+  function getDiskHistory() {
+    var map = loadDiskHistoryMap();
+    var list = map[diskHistoryKey()];
+    return Array.isArray(list) ? list : (state.diskHistory || []);
+  }
+
+  function formatHistoryTime(timestamp) {
+    try {
+      return new Date(timestamp).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return 'data indisponível';
+    }
+  }
+
   function showDiskNotice(kind) {
     var notice = $('#disk-notice');
     if (!notice) return;
@@ -816,13 +941,13 @@
     if (kind === 'missing') {
       text = 'O arquivo "' + state.name + '" não foi encontrado no disco.';
     } else if (hasLocalEdits()) {
-      text = 'O arquivo "' + state.name + '" mudou no disco. Recarregar substitui suas alterações locais.';
+      text = 'O arquivo "' + state.name + '" mudou no disco. Revise as alterações; suas edições locais continuam no editor.';
     } else {
-      text = 'O arquivo "' + state.name + '" mudou no disco.';
+      text = 'O arquivo "' + state.name + '" mudou no disco. Revise antes de aplicar.';
     }
 
     $('#disk-notice-text').textContent = text;
-    $('#disk-notice-reload').textContent = kind === 'missing' ? 'Salvar como…' : 'Recarregar do disco';
+    $('#disk-notice-reload').textContent = kind === 'missing' ? 'Salvar como…' : 'Revisar alterações';
     notice.hidden = false;
   }
 
@@ -870,6 +995,7 @@
 
   async function checkDiskChange(forceCompare) {
     if (!diskBound() || state.saving || diskCheckBusy) return;
+    if ($('#modal-review') && $('#modal-review').classList.contains('on')) return;
 
     diskCheckBusy = true;
     try {
@@ -910,8 +1036,9 @@
 
       state.diskStamp = stamp;
       state.diskConflict = true;
+      recordDiskVersion(text, stamp);
 
-      if (!hasLocalEdits() && state.prefs.autoReload) {
+      if (!hasLocalEdits() && state.prefs.externalMode === 'auto') {
         applyDiskContent(text, snap.file, snap.handle);
         toast('Documento atualizado do disco.');
         return;
@@ -971,6 +1098,7 @@
       if (!ok) return;
     }
 
+    recordDiskVersion(text, stamp);
     applyDiskContent(text, snap.file, snap.handle);
     toast('Documento atualizado do disco.');
   }
@@ -981,8 +1109,288 @@
       saveDocument(true);
       return;
     }
+    openReview();
+  }
+
+  /* --------------------------------------------- revisão de alterações -- */
+
+  function reviewLineHtml(text, kind) {
+    return '<span class="review-line ' + kind + '"><span class="sign">' +
+      (kind === 'del' ? '-' : '+') + '</span>' +
+      escapeHtml(text === '' ? ' ' : text) + '</span>';
+  }
+
+  function reviewHunkHtml(hunk, index, disabled) {
+    var maxLines = 300;
+    var removed = hunk.baseLines.slice(0, maxLines).map(function (line) {
+      return reviewLineHtml(line, 'del');
+    }).join('');
+    var added = hunk.remoteLines.slice(0, maxLines).map(function (line) {
+      return reviewLineHtml(line, 'add');
+    }).join('');
+    var more = '';
+
+    if (hunk.baseLines.length > maxLines || hunk.remoteLines.length > maxLines) {
+      more = '<div class="review-more">Exibindo as primeiras ' + maxLines + ' linhas de cada lado.</div>';
+    }
+
+    return '<div class="review-hunk">' +
+      '<div class="review-hunk-head">' +
+      '<label><input type="checkbox" data-hunk="' + index + '"' +
+      (disabled ? ' disabled' : ' checked') + '> Aceitar trecho ' + (index + 1) + '</label>' +
+      '<span>linha ' + (hunk.baseStart + 1) + ' | +' + hunk.remoteLines.length + ' -' + hunk.baseLines.length + '</span>' +
+      '</div>' +
+      '<div class="review-lines">' + removed + added + more + '</div>' +
+      '</div>';
+  }
+
+  function updateReviewApplyState() {
+    var boxes = $$('#review-diff input[data-hunk]');
+    var checked = boxes.filter(function (box) { return box.checked; }).length;
+    var apply = $('#review-apply');
+    var all = $('#review-select-all');
+
+    if (apply) apply.disabled = !boxes.length || !checked;
+    if (all) all.checked = boxes.length > 0 && checked === boxes.length;
+  }
+
+  function renderReview() {
+    var review = state.review;
+    if (!review) return;
+
+    var summary;
+    if (!review.hunks.length) {
+      summary = review.dirty
+        ? 'Nenhuma alteração externa pendente. O editor tem edições locais não salvas.'
+        : 'O editor está sincronizado com a versão atual do disco.';
+    } else if (review.dirty) {
+      summary = 'O arquivo mudou no disco e há alterações locais não salvas. O diff compara a última versão salva com a versão do disco.';
+    } else {
+      summary = review.hunks.length + (review.hunks.length === 1 ? ' trecho alterado' : ' trechos alterados') +
+        ' no disco. Desmarque o que deve permanecer como está.';
+    }
+
+    $('#review-summary').textContent = summary;
+
+    var warning = $('#review-warning');
+    warning.hidden = !review.dirty || !review.hunks.length;
+    warning.textContent = review.dirty && review.hunks.length
+      ? 'Suas alterações locais não serão combinadas automaticamente. Para carregar o disco, elas serão descartadas.'
+      : '';
+
+    $('#review-toolbar').hidden = review.dirty || !review.hunks.length;
+    $('#review-select-all').checked = true;
+
+    $('#review-diff').innerHTML = review.hunks.length
+      ? review.hunks.map(function (hunk, index) {
+          return reviewHunkHtml(hunk, index, review.dirty);
+        }).join('')
+      : '<div class="review-empty">Nenhuma diferença pendente.</div>';
+
+    var history = review.history || [];
+    $('#review-history-list').innerHTML = history.length
+      ? history.map(function (entry, index) {
+          var lines = String(entry.text || '').split('\n');
+          var preview = '';
+
+          for (var i = 0; i < lines.length; i++) {
+            if (lines[i].trim()) { preview = lines[i].trim(); break; }
+          }
+
+          if (preview.length > 80) preview = preview.slice(0, 80) + '...';
+
+          return '<div class="review-history-item">' +
+            '<div class="review-history-main">' +
+            '<span class="review-history-time">' + escapeHtml(formatHistoryTime(entry.at)) + '</span>' +
+            (entry.stamp === review.remoteStamp ? ' <span class="review-history-current">atual</span>' : '') +
+            '<span class="review-history-preview">' + escapeHtml(preview || '(documento vazio)') + '</span>' +
+            '</div>' +
+            '<button type="button" class="btn" data-review-history="' + index + '">Restaurar</button>' +
+            '</div>';
+        }).join('')
+      : '<div class="review-empty">Nenhuma versão externa registrada.</div>';
+
+    $('#review-keep').hidden = !review.hunks.length;
+    $('#review-apply').hidden = review.dirty || !review.hunks.length;
+    $('#review-reload').hidden = !review.dirty;
+
+    updateReviewApplyState();
+  }
+
+  async function openReview() {
+    if (!diskBound()) {
+      toast('Abra o arquivo ou a pasta do documento para revisar o disco.');
+      return;
+    }
+
+    if (state.saving) {
+      toast('Aguarde o salvamento terminar.');
+      return;
+    }
+
+    var snap = await readDiskSnapshot();
+
+    if (snap.status === 'missing') {
+      showDiskNotice('missing');
+      toast('Arquivo não encontrado no disco.');
+      return;
+    }
+
+    if (snap.status !== 'ok') {
+      toast('Não foi possível ler o arquivo do disco.');
+      return;
+    }
+
+    var remoteText;
+    try {
+      remoteText = await snap.file.text();
+    } catch (e) {
+      toast('Não foi possível ler o arquivo do disco.');
+      return;
+    }
+
+    var stamp = stampOf(snap.file);
+    var baseText = state.savedText;
+    var localText = editor.value;
+
+    if (localText === remoteText) {
+      state.text = remoteText;
+      state.savedText = remoteText;
+      state.diskStamp = stamp;
+      state.diskConflict = false;
+      state.diskNoticeStamp = null;
+      if (state.dirty) markDirty(false);
+      hideDiskNotice();
+      baseText = remoteText;
+    }
+
+    var hunks = Diff ? Diff.hunks(baseText, remoteText) : [];
+
+    if (remoteText !== baseText) {
+      recordDiskVersion(remoteText, stamp);
+    } else {
+      state.diskStamp = stamp;
+      state.diskNoticeStamp = null;
+      state.diskConflict = false;
+      hideDiskNotice();
+    }
+
+    state.review = {
+      baseText: baseText,
+      localText: localText,
+      remoteText: remoteText,
+      remoteFile: snap.file,
+      remoteHandle: snap.handle,
+      remoteStamp: stamp,
+      hunks: hunks,
+      dirty: localText !== baseText,
+      history: getDiskHistory()
+    };
+
+    renderReview();
+    openModal('modal-review');
+  }
+
+  function applyReviewedText(text, remoteText, remoteFile, remoteStamp) {
+    var hadFocus = document.activeElement === editor;
+    var selection = editor.selectionStart;
+    var editorTop = editor.scrollTop;
+    var previewTop = previewScroll.scrollTop;
+
+    flushHistory();
+    clearImageCache();
+
+    editor.value = text;
+    editor.setSelectionRange(Math.min(selection, text.length), Math.min(selection, text.length));
+
+    state.savedText = remoteText;
+    state.diskStamp = remoteStamp || (remoteFile ? stampOf(remoteFile) : state.diskStamp);
+    state.diskConflict = false;
+    state.diskNoticeStamp = null;
+    hideDiskNotice();
+
+    onInput();
+    renderNow();
+    editor.scrollTop = editorTop;
+    previewScroll.scrollTop = previewTop;
+    syncOverlayScroll();
+    pushHistory();
+    saveDraftNow();
+
+    if (hadFocus) editor.focus();
+  }
+
+  function applyReview() {
+    var review = state.review;
+    if (!review || review.dirty) return;
+
+    var accepted = {};
+    $$('#review-diff input[data-hunk]').forEach(function (box) {
+      accepted[Number(box.dataset.hunk)] = box.checked;
+    });
+
+    var selected = Object.keys(accepted).some(function (key) { return accepted[key]; });
+    if (!selected) {
+      toast('Selecione ao menos um trecho para aplicar.');
+      return;
+    }
+
+    var merged = Diff.merge(review.baseText, review.hunks, accepted);
+    applyReviewedText(merged, review.remoteText, review.remoteFile, review.remoteStamp);
+    closeModal('modal-review');
+    toast(merged === review.remoteText ? 'Versão do disco aplicada.' : 'Trechos selecionados aplicados.');
+  }
+
+  function keepReviewLocal() {
+    var review = state.review;
+    if (!review) return;
+
+    if (review.remoteStamp) state.diskStamp = review.remoteStamp;
+    state.diskNoticeStamp = state.diskStamp;
+    state.diskConflict = true;
+    hideDiskNotice();
+    closeModal('modal-review');
+    toast('Versão externa mantida para revisão. Salvar substitui o disco.');
+  }
+
+  function reloadReview() {
+    if (!window.confirm('Descartar suas alterações locais e carregar a versão do disco?')) return;
+    closeModal('modal-review');
     reloadFromDisk(true);
   }
+
+  function restoreReviewHistory(index) {
+    var review = state.review;
+    if (!review) return;
+
+    var entry = (review.history || [])[index];
+    if (!entry) return;
+
+    if (!window.confirm('Restaurar a versão de ' + formatHistoryTime(entry.at) + ' no editor? O texto será tratado como alteração local.')) {
+      return;
+    }
+
+    flushHistory();
+    clearImageCache();
+
+    editor.value = entry.text;
+    editor.setSelectionRange(0, 0);
+
+    state.savedText = review.remoteText;
+    state.diskStamp = review.remoteStamp || state.diskStamp;
+    state.diskConflict = false;
+    state.diskNoticeStamp = null;
+    hideDiskNotice();
+
+    onInput();
+    renderNow();
+    pushHistory();
+    saveDraftNow();
+
+    closeModal('modal-review');
+    toast('Versão externa restaurada no editor.');
+  }
+
 
   async function observeCurrentFile() {
     if (!diskObserver) return;
@@ -1608,6 +2016,7 @@
     save: function () { saveDocument(false); },
     saveAs: function () { saveDocument(true); },
     reloadDisk: function () { reloadFromDisk(false); },
+    reviewDisk: function () { openReview(); },
     exportHtml: exportHtml,
     exportPdf: function () { printDocument(); },
     exportDocx: function () { exportOffice('docx'); },
@@ -1691,6 +2100,7 @@
     openFolder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2h9v10h-17z"/><path d="M12 13v4M10 15h4"/></svg>',
     save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h11l3 3v14H5z"/><path d="M8.5 3.5v6h7v-6M8.5 20.5v-6h7v6"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v5h-5"/><path d="M4 19v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.4-2.6L20 10"/><path d="M17.9 15a7 7 0 0 1-11.4 2.6L4 14"/></svg>',
+    review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.7"/></svg>',
     print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8.5v-5h10v5M5 8.5h14v8h-3M8 20.5h8v-7H8z"/></svg>',
     undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4.5 11.5 9 16"/><path d="M4.5 11.5H14a5.5 5.5 0 0 1 0 11h-2"/></svg>',
     redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 7 4.5 4.5L15 16"/><path d="M19.5 11.5H10a5.5 5.5 0 0 0 0 11h2"/></svg>',
@@ -1731,6 +2141,7 @@
         { cmd: 'openFolder', icon: 'openFolder', title: 'Abrir pasta' },
         { cmd: 'save', icon: 'save', title: 'Salvar (Ctrl+S)' },
         { cmd: 'reloadDisk', icon: 'refresh', title: 'Atualizar do disco (F5)' },
+        { cmd: 'reviewDisk', icon: 'review', title: 'Revisar alterações externas' },
         { cmd: 'exportPdf', icon: 'print', title: 'Imprimir / PDF (Ctrl+P)' }
       ]
     },
@@ -1894,6 +2305,7 @@
           { label: 'Salvar', key: 'Ctrl+S', cmd: 'save' },
           { label: 'Salvar como…', key: 'Ctrl+Shift+S', cmd: 'saveAs' },
           { label: 'Atualizar do disco', key: 'F5', cmd: 'reloadDisk' },
+          { label: 'Revisar alterações externas', cmd: 'reviewDisk' },
           { sep: true },
           { label: 'Exportar como HTML', cmd: 'exportHtml' },
           { label: 'Exportar como DOCX', cmd: 'exportDocx' },
@@ -3574,6 +3986,28 @@
     var diskClose = $('#disk-notice-close');
     if (diskClose) diskClose.addEventListener('click', dismissDiskNotice);
 
+    /* revisão de alterações externas */
+    $('#review-apply').addEventListener('click', applyReview);
+    $('#review-keep').addEventListener('click', keepReviewLocal);
+    $('#review-reload').addEventListener('click', reloadReview);
+
+    $('#review-select-all').addEventListener('change', function (e) {
+      $$('#review-diff input[data-hunk]').forEach(function (box) {
+        box.checked = e.target.checked;
+      });
+      updateReviewApplyState();
+    });
+
+    $('#review-diff').addEventListener('change', function (e) {
+      if (e.target.matches('input[data-hunk]')) updateReviewApplyState();
+    });
+
+    $('#review-history-list').addEventListener('click', function (e) {
+      var button = e.target.closest('button[data-review-history]');
+      if (!button) return;
+      restoreReviewHistory(Number(button.dataset.reviewHistory));
+    });
+
     window.addEventListener('focus', function () { checkDiskChange(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') checkDiskChange();
@@ -3612,10 +4046,17 @@
     $('#pref-highlight').addEventListener('change', function (e) { setPref('highlight', e.target.checked); });
     $('#pref-autopair').addEventListener('change', function (e) { setPref('autopair', e.target.checked); });
     $('#pref-autosave').addEventListener('change', function (e) { setPref('autosave', e.target.checked); });
-    $('#pref-autoreload').addEventListener('change', function (e) {
-      setPref('autoReload', e.target.checked);
-      if (e.target.checked) checkDiskChange(true);
-      toast(e.target.checked ? 'Atualização automática ativada.' : 'Atualização automática desativada.');
+    $('#pref-external-mode').addEventListener('change', function (e) {
+      var mode = e.target.value;
+      setPref('externalMode', mode);
+      if (mode !== 'off') checkDiskChange(true);
+
+      var messages = {
+        review: 'Revisão antes de aplicar ativada.',
+        auto: 'Aplicação automática ativada.',
+        off: 'Atualização externa automática desativada.'
+      };
+      toast(messages[mode] || 'Preferência atualizada.');
     });
     $('#pref-sync').addEventListener('change', function (e) { setPref('sync', e.target.checked); });
     $('#pref-linebreak').addEventListener('change', function (e) {

@@ -32,7 +32,7 @@ for (const [nome, ok] of Object.entries(casos)) {
 }
 
 console.log(falhas === 0
-  ? `\nOK — ${Object.keys(casos).length} verificações passaram`
+  ? `\nOK: ${Object.keys(casos).length} verificações passaram`
   : `\n${falhas} de ${Object.keys(casos).length} falharam`);
 
 process.exit(falhas ? 1 : 0);

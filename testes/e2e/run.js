@@ -291,7 +291,7 @@ async function main() {
 
     check('título com Iluminura', boot.title.endsWith('Iluminura'), boot.title);
     check('marca Iluminura', boot.brand === 'Iluminura', boot.brand);
-    check('versão 1.5.0', boot.version === '1.5.0', boot.version);
+    check('versão 1.6.0', boot.version === '1.6.0', boot.version);
     check('manifesto PWA', !!boot.manifest && boot.manifest.endsWith('/manifest.webmanifest'), boot.manifest);
     check('editor e pré-visualização', boot.editor && boot.preview);
 
@@ -527,7 +527,109 @@ async function main() {
     check('impressão mantém documento e diagrama', print.document === 'block' &&
       print.documentWidth > 300 && print.diagram >= 1, JSON.stringify(print));
 
-    console.log('\n[6] PWA offline');
+    console.log('\n[6] Revisão de alterações externas');
+
+    const reviewContent = [
+      '# Documento',
+      '',
+      'Parágrafo A original.',
+      '',
+      'Parágrafo B original.',
+      '',
+      '```mermaid',
+      'graph LR',
+      '  X[Um] --> Y[Dois]',
+      '```',
+      ''
+    ].join('\n');
+
+    const reviewV2 = reviewContent
+      .replace('Parágrafo A original.', 'Parágrafo A novo.')
+      .replace('Parágrafo B original.', 'Parágrafo B novo.');
+
+    const writeOpfs = (text) => evaluate(`(async () => {
+      const root = await navigator.storage.getDirectory();
+      const handle = await root.getFileHandle('artigo.md', { create: true });
+      const writable = await handle.createWritable();
+      await writable.write(${JSON.stringify(text)});
+      await writable.close();
+      return true;
+    })()`);
+
+    await evaluate(`(() => {
+      window.confirm = () => true;
+      Object.defineProperty(window, 'showDirectoryPicker', {
+        configurable: true,
+        value: async () => navigator.storage.getDirectory()
+      });
+      return true;
+    })()`);
+    await writeOpfs(reviewContent);
+
+    await evaluate(`document.querySelector('#toolbar button[data-cmd="openFolder"]').click()`);
+    await sleep(900);
+    await evaluate(`(() => {
+      const row = [...document.querySelectorAll('#sidebar-body .file-row')]
+        .find((button) => button.textContent.includes('artigo.md'));
+      if (row) row.click();
+      return !!row;
+    })()`);
+    await sleep(900);
+
+    const reviewInitial = await evaluate(`document.querySelector('#editor').value`);
+    check('arquivo de revisão aberto', reviewInitial.includes('Parágrafo A original'), reviewInitial.slice(0, 80));
+
+    await writeOpfs(reviewV2);
+    await sleep(2800);
+    const reviewNotice = await evaluate(`(() => {
+      const notice = document.querySelector('#disk-notice');
+      return {
+        hidden: notice.hidden,
+        text: document.querySelector('#disk-notice-text').textContent,
+        action: document.querySelector('#disk-notice-reload').textContent
+      };
+    })()`);
+    check('aviso de revisão externa', reviewNotice.hidden === false &&
+      reviewNotice.text.includes('mudou no disco') &&
+      reviewNotice.action === 'Revisar alterações', JSON.stringify(reviewNotice));
+
+    await evaluate(`document.querySelector('#disk-notice-reload').click()`);
+    await sleep(500);
+    const reviewModal = await evaluate(`(() => ({
+      open: document.querySelector('#modal-review').classList.contains('on'),
+      hunks: document.querySelectorAll('.review-hunk').length,
+      boxes: document.querySelectorAll('#review-diff input[data-hunk]').length
+    }))()`);
+    check('modal com diff por trecho', reviewModal.open && reviewModal.hunks === 2 &&
+      reviewModal.boxes === 2, JSON.stringify(reviewModal));
+
+    await evaluate(`(() => {
+      const boxes = [...document.querySelectorAll('#review-diff input[data-hunk]')];
+      if (boxes[1]) {
+        boxes[1].checked = false;
+        boxes[1].dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return true;
+    })()`);
+    await evaluate(`document.querySelector('#review-apply').click()`);
+    await sleep(600);
+    const reviewApplied = await evaluate(`document.querySelector('#editor').value`);
+    check('aceitar um trecho e manter o outro', reviewApplied.includes('Parágrafo A novo') &&
+      reviewApplied.includes('Parágrafo B original') &&
+      !reviewApplied.includes('Parágrafo B novo'), reviewApplied.slice(0, 120));
+
+    const reviewHistory = await evaluate(`(() => {
+      try {
+        const map = JSON.parse(localStorage.getItem('iluminura.disk.history.v1') || '{}');
+        return Object.keys(map).map((key) => map[key].length);
+      } catch (e) {
+        return [];
+      }
+    })()`);
+    check('histórico externo registrado', reviewHistory.length > 0 &&
+      reviewHistory[0] >= 1, JSON.stringify(reviewHistory));
+
+    console.log('\n[7] PWA offline');
     await evaluate(`navigator.serviceWorker.ready`);
     await send('Network.emulateNetworkConditions', {
       offline: true,

@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const CACHE = 'iluminura-v1.5.0';
+const CACHE = 'iluminura-v1.6.0';
 const CORE = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const CORE = [
   './assets/app.js',
   './assets/markdown.js',
   './assets/caminhos.js',
+  './assets/diff.js',
   './assets/exportar.js',
   './assets/logo.svg',
   './assets/icons/favicon.svg',

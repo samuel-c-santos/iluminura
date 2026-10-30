@@ -124,7 +124,7 @@ for (const [nome, ok] of Object.entries(casos)) {
 const stats = MD.stats(amostra);
 
 console.log(falhas === 0
-  ? `\nOK — ${Object.keys(casos).length} verificações passaram`
+  ? `\nOK: ${Object.keys(casos).length} verificações passaram`
   : `\n${falhas} de ${Object.keys(casos).length} falharam`);
 
 console.log('títulos :', headings.map(h => h.level + ':' + h.text).join(' | '));
