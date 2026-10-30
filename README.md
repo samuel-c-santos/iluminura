@@ -8,6 +8,28 @@ O projeto inclui um fluxo de revisão de alterações externas, pensado para doc
 
 ---
 
+## Capturas
+
+### Interface
+
+![Interface do Iluminura em modo dividido, com faixa de ferramentas, editor e pré-visualização](assets/docs/interface.png)
+
+Modo dividido com faixa de ferramentas, editor Markdown, pré-visualização renderizada e painel de esboço.
+
+### Fila de revisão do projeto
+
+![Fila de revisão com arquivos alterados pelo agente](assets/docs/fila.png)
+
+Arquivos alterados no projeto, com número de trechos, linhas adicionadas e removidas e horário da detecção.
+
+### Revisão por trechos
+
+![Revisão de alterações externas com diff e histórico](assets/docs/revisao.png)
+
+Diff por trechos, seleção individual, histórico de versões externas e ações para aplicar ou manter a versão local.
+
+---
+
 ## 1. Visão Geral
 
 O **Iluminura** opera inteiramente no ambiente do cliente (navegador web), mantendo o processamento e o armazenamento de arquivos no sistema local do usuário. O projeto não realiza requisições de rede, telemetria ou integração com serviços em nuvem. A biblioteca Mermaid é servida localmente e carregada apenas quando o documento contém diagramas.
@@ -147,6 +169,7 @@ iluminura/
 │   ├── exportar.js         Geração de pacotes DOCX e EPUB no navegador
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
 │   ├── logo.svg            Identificador visual vetorial
+│   ├── docs/               Capturas de tela usadas na documentação
 │   ├── icons/              Ícones de instalação em 192 e 512 pixels
 │   └── vendor/
 │       ├── mermaid.min.js  Biblioteca opcional de diagramas, carregada sob demanda
