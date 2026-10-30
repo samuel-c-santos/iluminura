@@ -49,6 +49,11 @@ const x = 42; // comentário
 function f(a) { return "texto" + a; }
 \`\`\`
 
+\`\`\`mermaid
+graph TD
+  A[Início] --> B[Fim]
+\`\`\`
+
 ## Matemática
 
 Inline $E = mc^2$ e bloco:
@@ -95,6 +100,10 @@ const casos = {
   'tabela': html.includes('<th') && html.includes('text-align:right'),
   'realce de código': html.includes('tok-kw') && html.includes('tok-com') && html.includes('tok-str'),
   'rótulo de linguagem': html.includes('class="code-lang">js<'),
+  'bloco mermaid': html.includes('class="mermaid-block"') &&
+    html.includes('mermaid-source') &&
+    html.includes('A[Início] --&gt; B[Fim]') &&
+    !html.includes('language-mermaid'),
   'fórmula inline': html.includes('math-inline'),
   'fração': html.includes('mfrac'),
   'bloco de fórmula': html.includes('math-block'),

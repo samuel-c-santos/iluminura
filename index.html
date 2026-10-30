@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>leitor_md</title>
-<meta name="description" content="Leitor e editor Markdown livre, local e sem dependências.">
+<title>Iluminura</title>
+<meta name="description" content="Editor e leitor Markdown local, visual e offline, com diagramas Mermaid e impressão limpa.">
 <link rel="stylesheet" href="assets/style.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6feb'/%3E%3Cpath d='M7 22V10h2.6l3.4 5 3.4-5H19v12h-2.4v-7.6L13 20h-.8l-3.4-5.6V22z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6feb'/%3E%3Ccircle cx='16' cy='10.5' r='2.6' fill='%23f2c14e'/%3E%3Cpath d='M16 16v10' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
 <body>
 
@@ -14,7 +14,7 @@
 
   <!-- ------------------------------------------------------------ menu -->
   <header class="menubar">
-    <span class="brand"><span class="dot"></span>leitor_md</span>
+    <span class="brand"><span class="dot"></span>Iluminura</span>
     <nav id="menus" class="menus"></nav>
     <span class="spacer"></span>
     <button class="icon-btn" id="btn-toolbar" title="Barra de ferramentas (Ctrl+Shift+T)" aria-label="Barra de ferramentas">
@@ -240,16 +240,16 @@
 
 <div class="modal-backdrop" id="modal-about">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ab-title">
-    <h2 id="ab-title">Sobre o leitor_md</h2>
+    <h2 id="ab-title">Sobre o Iluminura</h2>
     <p style="font-size:12.5px;line-height:1.7;color:var(--fg-dim);margin:0 0 10px">
-      Leitor e editor Markdown de código aberto, escrito do zero em JavaScript puro.
-      Sem Electron, sem servidor obrigatório, sem telemetria: o texto nunca sai do seu computador.
+      Editor e leitor Markdown de código aberto, escrito do zero em JavaScript puro.
+      Visual, local e silencioso: o texto nunca sai do seu computador.
     </p>
     <p style="font-size:12.5px;line-height:1.7;color:var(--fg-dim);margin:0 0 10px">
-      Licença MIT. Motor Markdown, analisador léxico, realce de sintaxe, temas e interface gráfica implementados de forma autônoma.
+      Licença MIT. Motor Markdown, diagramas Mermaid sob demanda, realce de sintaxe, temas e interface gráfica implementados de forma autônoma.
     </p>
     <p style="font-size:12px;color:var(--fg-faint);margin:0">
-      Versão <span id="app-version">1.0.0</span>
+      Versão <span id="app-version">1.4.0</span>
     </p>
     <div class="modal-actions">
       <button class="btn primary" data-close="modal-about">Fechar</button>

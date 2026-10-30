@@ -1,6 +1,6 @@
 # exemplo.md
 
-Documento de demonstração do **leitor_md**. Apague tudo e escreva o seu — ou abra outro arquivo com `Ctrl+O`.
+Documento de demonstração do **Iluminura**. Apague tudo e escreva o seu — ou abra outro arquivo com `Ctrl+O`.
 
 ## Texto
 
@@ -52,8 +52,8 @@ esta linha começa depois de um `<br>`.
 
 ```js
 // destaque de sintaxe embutido
-const leitor = {
-  nome: 'leitor_md',
+const iluminura = {
+  nome: 'Iluminura',
   livre: true,
   dependencias: []
 };
@@ -62,7 +62,7 @@ function saudacao(nome) {
   return `Olá, ${nome}!`;
 }
 
-console.log(saudacao(leitor.nome));
+console.log(saudacao(iluminura.nome));
 ```
 
 ```python
@@ -73,6 +73,14 @@ def fibonacci(n: int) -> list[int]:
     return seq
 
 print(fibonacci(10))
+```
+
+## Diagramas
+
+```mermaid
+graph LR
+  A[Texto] --> B[Iluminura]
+  B --> C[Leitura visual]
 ```
 
 ## Matemática

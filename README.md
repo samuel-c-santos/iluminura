@@ -1,14 +1,18 @@
-# leitor_md
+# Iluminura
 
-Aplicativo web local e autônomo para edição e renderização de documentos em formato Markdown. Implementado em JavaScript puro (ECMAScript padrão), sem dependências externas, bibliotecas de terceiros ou processos de compilação/empacotamento.
+Aplicativo web local e autônomo para leitura, escrita e renderização de documentos Markdown. Implementado em JavaScript puro, com o núcleo sem dependências e uma única biblioteca opcional empacotada localmente para diagramas Mermaid.
 
-![leitor_md](assets/logo.svg)
+![Iluminura](assets/logo.svg)
+
+*Markdown local, visual e livre.*
+
+Projetado para quem prefere acompanhar documentos de forma visual — como em leitores focados em escrita, a exemplo do Typora — e para quem trabalha com agentes de IA no terminal e quer ver o projeto mudando em tempo real, sem abrir um editor de código completo.
 
 ---
 
 ## 1. Visão Geral
 
-O `leitor_md` opera inteiramente no ambiente do cliente (navegador web), mantendo o processamento e o armazenamento de arquivos no sistema local do usuário. O projeto não realiza requisições de rede, telemetria ou integração com serviços em nuvem.
+O **Iluminura** opera inteiramente no ambiente do cliente (navegador web), mantendo o processamento e o armazenamento de arquivos no sistema local do usuário. O projeto não realiza requisições de rede, telemetria ou integração com serviços em nuvem. A biblioteca Mermaid é servida localmente e carregada apenas quando o documento contém diagramas.
 
 ### Arquitetura de Execução
 
@@ -51,6 +55,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - Citações em bloco com suporte a aninhamento e blocos de alerta padronizados (`NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`).
 - Tabelas GFM com delimitadores de alinhamento (`:---`, `:---:`, `---:`).
 - Blocos de código com realce de sintaxe nativo para as linguagens: JavaScript, TypeScript, Python, Go, Rust, Java, C, SQL, HTML, CSS, Shell e YAML.
+- **Diagramas Mermaid**: blocos ` ```mermaid ` são renderizados como SVG interativo, com suporte a flowchart, sequence, class, state, ER, gantt, journey e outros diagramas da biblioteca. O tema acompanha a interface (claro, escuro ou sépia); diagramas inválidos exibem o código original e a mensagem de erro sem quebrar a pré-visualização.
 - Renderização matemática: suporte a expressões TeX em linha (`$...$`) e em bloco (`$$...$$`), processadas via conversor matemático interno para MathML/SVG.
 - Notas de rodapé (`[^1]`), metadados YAML front matter (filtrados da visualização) e separadores temáticos (`<hr>`).
 - Segurança: sanitização estrita de HTML arbitrário e bloqueio preventivo de URIs executáveis (esquema `javascript:`).
@@ -69,8 +74,8 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **Preferência**: a atualização automática pode ser desativada no painel de Preferências.
 
 ### 2.6 Exportação
-- **HTML Autônomo**: Documento compilado contendo folhas de estilo e imagens embutidas (codificação Base64).
-- **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, e há margens de página, controle de quebras e preservação de cores e blocos de código.
+- **HTML Autônomo**: Documento compilado contendo folhas de estilo, imagens embutidas (codificação Base64) e diagramas Mermaid já convertidos em SVG.
+- **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, os diagramas são renderizados no tema claro e há margens de página, controle de quebras e preservação de cores e blocos de código.
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
 
 ---
@@ -106,14 +111,17 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 ## 4. Estrutura do Repositório
 
 ```
-leitor_md/
+iluminura/
 ├── index.html              Interface gráfica do usuário e estrutura dos painéis
 ├── assets/
 │   ├── markdown.js         Analisador sintático, gerador de AST e motor de realce
 │   ├── caminhos.js         Resolução segura de caminhos relativos de imagens
 │   ├── app.js              Controlador de estado, manipulação de arquivos e eventos
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
-│   └── logo.svg            Identificador visual vetorial
+│   ├── logo.svg            Identificador visual vetorial
+│   └── vendor/
+│       ├── mermaid.min.js  Biblioteca opcional de diagramas, carregada sob demanda
+│       └── LICENSE-mermaid Licença MIT da biblioteca Mermaid
 ├── servidor.js             Servidor HTTP local minimalista sem módulos externos
 ├── iniciar.bat             Script de inicialização rápida para ambiente Windows
 ├── exemplo.md              Documento de validação de sintaxe e referência
@@ -134,14 +142,14 @@ node testes/markdown.test.js
 node testes/caminhos.test.js
 ```
 
-A rotina avalia 30 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
+A rotina avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
 
 ---
 
 ## 6. Limitações Técnicas e Escopo
 
 - **Modelo de Visualização**: A interface utiliza arquitetura de painel duplo (editor de texto e painel de renderização) ou visualização alternada, não empregando edição direta *in-place* no documento renderizado.
-- **Diagramas Vetoriais**: Sintaxes baseadas em bibliotecas externas (como Mermaid ou PlantUML) não são processadas graficamente, permanecendo como blocos de código formatados.
+- **Diagramas**: Mermaid é suportado por uma cópia local da biblioteca oficial (aprox. 3,5 MB), carregada sob demanda apenas em documentos com blocos `mermaid`. Outras sintaxes, como PlantUML, permanecem como blocos de código. O tema dos diagramas acompanha a interface.
 - **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
 - **Vínculo para Atualização Externa**: a sincronização exige um identificador de arquivo ou pasta concedido pela File System Access API. Documentos abertos pelo seletor clássico de arquivos, por rascunho ou por conteúdo colado não têm vínculo com o disco e precisam ser reabertos para refletir mudanças externas.
 - **Desempenho de Realce**: Documentos que excedem o limiar de 2.500 linhas têm a camada de realce do editor temporariamente desativada durante a digitação para preservar a taxa de quadros e a responsividade da entrada.
@@ -151,3 +159,5 @@ A rotina avalia 30 asserções do analisador, cobrindo processamento de blocos, 
 ## 7. Licença
 
 Este projeto é distribuído sob os termos da Licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
+
+Os diagramas Mermaid utilizam a biblioteca oficial Mermaid 11.17.2, também distribuída sob a Licença MIT; os termos estão em [assets/vendor/LICENSE-mermaid](assets/vendor/LICENSE-mermaid).

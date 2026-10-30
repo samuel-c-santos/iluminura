@@ -832,6 +832,56 @@ body.col-resizing { user-select: none; }
   user-select: none;
 }
 
+/* ------------------------------------------------------------ mermaid -- */
+
+.mermaid-block {
+  position: relative;
+  margin: 0 0 1.15em;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  text-align: center;
+  overflow-x: auto;
+}
+
+.mermaid-block[data-mermaid-state="pending"],
+.mermaid-block[data-mermaid-state="rendering"] { min-height: 110px; }
+
+.mermaid-block[data-mermaid-state="pending"] .mermaid-canvas::before,
+.mermaid-block[data-mermaid-state="rendering"] .mermaid-canvas::before {
+  content: "Renderizando diagrama…";
+  display: block;
+  padding: 34px 0;
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+
+.mermaid-source { display: none; }
+
+.mermaid-block svg { max-width: 100%; height: auto; }
+
+.mermaid-fallback {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  overflow-x: auto;
+  text-align: left;
+}
+
+.mermaid-block[data-mermaid-state="error"] {
+  border-color: color-mix(in srgb, #cf222e 28%, var(--border));
+  background: color-mix(in srgb, #cf222e 5%, var(--bg-soft));
+}
+
+.mermaid-error {
+  margin-top: 8px;
+  color: color-mix(in srgb, #cf222e 78%, var(--fg));
+  font-size: 11.5px;
+  text-align: left;
+}
+
 .tok-kw { color: var(--tok-kw); }
 .tok-str { color: var(--tok-str); }
 .tok-com { color: var(--tok-com); font-style: italic; }
@@ -1264,6 +1314,13 @@ kbd {
     -webkit-print-color-adjust: exact;
   }
   .document .code-lang { display: none; }
+  .document .mermaid-block {
+    background: #fff;
+    border-color: #ddd;
+    break-inside: avoid;
+  }
+  .document .mermaid-source { display: none; }
+  .document .mermaid-block svg { max-width: 100%; height: auto; }
   .document th, .document td { border-color: #d0d5db; }
   .document thead th { background: #f6f8fa; color: #111; }
   .document tbody tr:nth-child(even) { background: #fafbfc; }
@@ -1277,5 +1334,6 @@ kbd {
   .document .tok-tag { color: #116329; }
   .document img { max-width: 100%; height: auto; }
   .document h1, .document h2, .document h3 { break-after: avoid; }
-  .document pre, .document .code-block, .document table, .document img { break-inside: avoid; }
+  .document pre, .document .code-block, .document table, .document img,
+  .document .mermaid-block { break-inside: avoid; }
 }

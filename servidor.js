@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * leitor_md — servidor estático mínimo (sem dependências)
+ * Iluminura — servidor estático mínimo (sem dependências)
  * Uso: node servidor.js [porta]
  * Necessário apenas para recursos que exigem contexto seguro
  * (abrir/salvar arquivos e pastas via File System Access API).
@@ -80,7 +80,7 @@ server.on('error', (err) => {
 
 server.listen(PORT, '127.0.0.1', () => {
   const url = `http://127.0.0.1:${PORT}/`;
-  console.log('\n  leitor_md');
+  console.log('\n  Iluminura');
   console.log('  ─────────────────────────────');
   console.log('  Aberto em: ' + url);
   console.log('  (Ctrl+C encerra o servidor)\n');

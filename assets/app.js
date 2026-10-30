@@ -1,5 +1,5 @@
 /*
- * leitor_md — aplicação
+ * Iluminura — aplicação
  * JavaScript puro, sem dependências. Licença MIT.
  */
 (function () {
@@ -9,7 +9,8 @@
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var Caminhos = window.LeitorCaminhos;
 
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.4.0';
+  /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
   var LS_RECENT = 'leitormd.recent.v1';
@@ -69,6 +70,7 @@
 
   var el = {};
   var editor, preview, previewScroll, hlInner, findbar;
+  var appliedTheme = null;
   var diskObserver = null;
   var diskPollTimer = null;
   var diskCheckBusy = false;
@@ -91,6 +93,8 @@
   function applyPrefs() {
     var p = state.prefs;
     var root = document.documentElement;
+    var themeChanged = appliedTheme !== p.theme;
+    appliedTheme = p.theme;
 
     root.dataset.theme = p.theme;
 
@@ -128,6 +132,9 @@
     $('#stat-zoom').textContent = p.zoom + '%';
 
     applySplitRatio();
+    if (themeChanged && preview && preview.querySelector('.mermaid-block')) {
+      scheduleMermaid(state.renderSeq);
+    }
     syncToolbarState();
     paintSource();
   }
@@ -150,6 +157,7 @@
     updateStats();
     buildOutline();
     resolveDocImages(seq);
+    scheduleMermaid(seq);
   }
 
   var renderTimer = null;
@@ -197,7 +205,7 @@
     editor.value = text;
     editor.setSelectionRange(0, 0);
     markDirty(false);
-    document.title = state.name + ' — leitor_md';
+    document.title = state.name + ' — Iluminura';
     renderNow();
     paintSource();
     syncHeadingSelect();
@@ -514,6 +522,173 @@
       var src = img.dataset.origSrc || img.getAttribute('src') || '';
       return Caminhos && Caminhos.isRelative(src);
     });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * diagramas Mermaid (biblioteca carregada sob demanda)
+   * ------------------------------------------------------------------ */
+
+  var MERMAID_SRC = 'assets/vendor/mermaid.min.js';
+  var mermaidLoader = null;
+  var mermaidThemeApplied = null;
+  var mermaidTimer = null;
+  var mermaidRun = 0;
+
+  function mermaidThemeName() {
+    if (state.prefs.theme === 'escuro') return 'dark';
+    if (state.prefs.theme === 'sepia') return 'neutral';
+    return 'default';
+  }
+
+  function loadMermaid() {
+    if (window.mermaid) return Promise.resolve(window.mermaid);
+    if (mermaidLoader) return mermaidLoader;
+
+    mermaidLoader = new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = MERMAID_SRC;
+      script.async = true;
+      script.onload = function () {
+        if (window.mermaid) {
+          resolve(window.mermaid);
+        } else {
+          mermaidLoader = null;
+          reject(new Error('Mermaid indisponível'));
+        }
+      };
+      script.onerror = function () {
+        mermaidLoader = null;
+        reject(new Error('Falha ao carregar Mermaid'));
+      };
+      document.head.appendChild(script);
+    });
+
+    return mermaidLoader;
+  }
+
+  function initMermaid(mermaid, theme) {
+    if (mermaidThemeApplied === theme) return;
+
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: theme,
+      fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+      flowchart: { useMaxWidth: true, htmlLabels: true },
+      sequence: { useMaxWidth: true },
+      gantt: { useMaxWidth: true },
+      journey: { useMaxWidth: true },
+      class: { useMaxWidth: true },
+      state: { useMaxWidth: true },
+      er: { useMaxWidth: true }
+    });
+
+    mermaidThemeApplied = theme;
+  }
+
+  function mermaidErrorText(err) {
+    var text = err && err.message ? String(err.message) : 'Erro de sintaxe';
+    return text.split('\n')[0].replace(/^Error:\s*/i, '');
+  }
+
+  function showMermaidError(block, message) {
+    var canvas = block.querySelector('.mermaid-canvas');
+    if (!canvas) return;
+
+    var source = block.querySelector('.mermaid-source');
+    canvas.textContent = '';
+
+    var pre = document.createElement('pre');
+    pre.className = 'mermaid-fallback';
+    var code = document.createElement('code');
+    code.textContent = source ? source.textContent : '';
+    pre.appendChild(code);
+
+    var note = document.createElement('div');
+    note.className = 'mermaid-error';
+    note.textContent = 'Diagrama Mermaid: ' + message;
+
+    canvas.appendChild(pre);
+    canvas.appendChild(note);
+  }
+
+  async function renderMermaidBlocks(seq, themeOverride) {
+    if (seq !== undefined && seq !== state.renderSeq) return;
+
+    clearTimeout(mermaidTimer);
+    mermaidTimer = null;
+
+    var blocks = $$('#preview .mermaid-block');
+    if (!blocks.length) return;
+
+    var run = ++mermaidRun;
+    var mermaid;
+
+    try {
+      mermaid = await loadMermaid();
+    } catch (err) {
+      blocks.forEach(function (block) {
+        if (block.dataset.mermaidState !== 'ready') {
+          showMermaidError(block, 'não foi possível carregar a biblioteca.');
+        }
+      });
+      return;
+    }
+
+    if (run !== mermaidRun || (seq !== undefined && seq !== state.renderSeq)) return;
+
+    initMermaid(mermaid, themeOverride || mermaidThemeName());
+
+    for (var i = 0; i < blocks.length; i++) {
+      if (run !== mermaidRun || (seq !== undefined && seq !== state.renderSeq)) return;
+
+      var block = blocks[i];
+      if (!block.isConnected) continue;
+
+      var sourceEl = block.querySelector('.mermaid-source');
+      var canvas = block.querySelector('.mermaid-canvas');
+      var source = sourceEl ? sourceEl.textContent.trim() : '';
+      if (!canvas) continue;
+
+      if (!source) {
+        block.dataset.mermaidState = 'error';
+        showMermaidError(block, 'diagrama vazio.');
+        continue;
+      }
+
+      var id = 'mermaid-' + run + '-' + i + '-' + (Date.now() % 100000);
+      block.dataset.mermaidState = 'rendering';
+
+      try {
+        var result = await mermaid.render(id, source);
+        if (run !== mermaidRun || (seq !== undefined && seq !== state.renderSeq) || !block.isConnected) return;
+
+        canvas.innerHTML = result.svg;
+        block.dataset.mermaidState = 'ready';
+
+        if (typeof result.bindFunctions === 'function') result.bindFunctions(canvas);
+      } catch (err) {
+        if (run !== mermaidRun || !block.isConnected) return;
+
+        var stray = document.getElementById(id);
+        if (stray) stray.remove();
+
+        block.dataset.mermaidState = 'error';
+        showMermaidError(block, mermaidErrorText(err));
+      }
+    }
+  }
+
+  function scheduleMermaid(seq) {
+    clearTimeout(mermaidTimer);
+    mermaidTimer = null;
+
+    if (!preview.querySelector('.mermaid-block')) return;
+
+    mermaidTimer = setTimeout(function () {
+      mermaidTimer = null;
+      renderMermaidBlocks(seq);
+    }, 180);
   }
 
   async function findFileByName(root, name, basePath, depth, budget) {
@@ -1110,7 +1285,7 @@
         state.diskNoticeStamp = null;
         state.diskConflict = false;
         hideDiskNotice();
-        document.title = state.name + ' — leitor_md';
+        document.title = state.name + ' — Iluminura';
         return saveDocument(false);
       } catch (err) {
         if (err && err.name === 'AbortError') return;
@@ -1772,7 +1947,7 @@
           { label: 'Atalhos de teclado', key: 'F1', cmd: 'shortcuts' },
           { label: 'Preferências…', key: 'Ctrl+,', cmd: 'prefs' },
           { sep: true },
-          { label: 'Sobre o leitor_md', cmd: 'about' }
+          { label: 'Sobre o Iluminura', cmd: 'about' }
         ]
       }
     ];
@@ -2466,8 +2641,13 @@
     '.doc .math-block{display:block;text-align:center;margin:0 0 1.2em}',
     '.doc .mfrac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .18em}',
     '.doc .mfrac .mnum{border-bottom:1px solid currentColor;padding:0 .25em}',
+    '.doc .mermaid-block{margin:0 0 1.15em;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-soft);text-align:center;overflow-x:auto}',
+    '.doc .mermaid-source{display:none}',
+    '.doc .mermaid-block svg{max-width:100%;height:auto}',
+    '.doc .mermaid-error{color:#cf222e;font-size:.78em;text-align:left;margin-top:8px}',
+    '.doc .mermaid-fallback{margin:0;padding:10px 12px;background:var(--bg-elev);border-radius:6px;text-align:left;overflow-x:auto}',
     '.tok-kw{color:#cf222e}.tok-str{color:#0a7d33}.tok-com{color:#6e7781;font-style:italic}.tok-num{color:#0550ae}.tok-tag{color:#116329}',
-    '@media print{body{background:#fff;color:#111}.doc{max-width:none;padding:0}}'
+    '@media print{body{background:#fff;color:#111}.doc{max-width:none;padding:0}.doc .mermaid-block{background:#fff;border-color:#ddd;break-inside:avoid}}'
   ].join('\n');
 
   function themeVars() {
@@ -2573,12 +2753,23 @@
       }));
     }
 
+    if (preview.querySelector('.mermaid-block')) {
+      await renderMermaidBlocks(state.renderSeq, 'default');
+
+      if (state.prefs.theme !== 'claro') {
+        window.addEventListener('afterprint', function () {
+          renderMermaidBlocks(state.renderSeq, mermaidThemeName());
+        }, { once: true });
+      }
+    }
+
     window.print();
   }
 
   async function exportHtml() {
     toast('Preparando HTML autônomo…');
     try {
+      await renderMermaidBlocks(state.renderSeq);
       var fragment = await prepareExportFragment();
       var html = buildExportHtml(fragment);
       var name = state.name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, '') + '.html';
@@ -2591,6 +2782,7 @@
 
   async function copyHtml() {
     try {
+      await renderMermaidBlocks(state.renderSeq);
       var fragment = await prepareExportFragment();
       await navigator.clipboard.writeText(fragment);
       toast('HTML do documento copiado.');
@@ -2925,9 +3117,9 @@
     applyPrefs();
 
     var demo = [
-      '# leitor_md',
+      '# Iluminura',
       '',
-      'Leitor e editor **Markdown** livre, local e sem dependências.',
+      'Leitura e escrita **Markdown** local, visual e sem dependências.',
       '',
       '> Abra um arquivo com `Ctrl+O`, ou arraste um `.md` para esta janela.',
       '',
@@ -2940,12 +3132,21 @@
       '| Recurso | Atalho |',
       '| --- | --- |',
       '| Localizar | `Ctrl+F` |',
+      '| Desfazer | `Ctrl+Z` |',
       '| Modo foco | `Ctrl+Shift+F` |',
       '| Código-fonte | `Ctrl+/` |',
       '',
       '```js',
-      'const leitor = { nome: "leitor_md", livre: true };',
-      'console.log(`Olá, ${leitor.nome}`);',
+      'const iluminura = { nome: "Iluminura", visual: true, livre: true };',
+      'console.log(`Olá, ${iluminura.nome}`);',
+      '```',
+      '',
+      '## Diagramas',
+      '',
+      '```mermaid',
+      'graph LR',
+      '  A[Markdown] --> B[Iluminura]',
+      '  B --> C[SVG]',
       '```',
       '',
       'Fórmula na linha: $E = mc^2$ e um bloco:',

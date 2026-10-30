@@ -614,6 +614,16 @@
         }
         if (i < to) i++;
         var code = body.join('\n');
+
+        /* diagramas Mermaid são renderizados sob demanda no app */
+        if (lang.toLowerCase() === 'mermaid') {
+          out.push('<div class="mermaid-block" data-line="' + startLine + '" data-mermaid-state="pending">' +
+            '<pre class="mermaid-source" aria-hidden="true"><code>' + escapeHtml(code) + '</code></pre>' +
+            '<div class="mermaid-canvas" role="img" aria-label="Diagrama Mermaid"></div>' +
+            '</div>');
+          continue;
+        }
+
         var label = lang ? '<span class="code-lang">' + escapeHtml(lang) + '</span>' : '';
         out.push('<div class="code-block" data-line="' + startLine + '">' + label +
           '<pre><code class="language-' + escapeAttr(lang || 'texto') + '">' +
