@@ -2,6 +2,8 @@
 
 Aplicativo web local e autônomo para leitura, escrita e renderização de documentos Markdown. Implementado em JavaScript puro, com o núcleo sem dependências e uma única biblioteca opcional empacotada localmente para diagramas Mermaid.
 
+O projeto inclui um fluxo de revisão de alterações externas, pensado para documentos editados por agentes de IA no terminal.
+
 ![Iluminura](assets/logo.svg)
 
 ---
@@ -78,6 +80,17 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **EPUB**: Pacote EPUB 3 com capítulo XHTML, sumário de títulos, folha de estilo, imagens e diagramas Mermaid em SVG inline.
 - **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, os diagramas são renderizados no tema claro e há margens de página, controle de quebras e preservação de cores e blocos de código.
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
+
+### 2.7 Cenário de Uso com Agentes
+O fluxo principal do Iluminura é acompanhar documentos alterados por agentes de IA executados no terminal:
+
+1. Abra a pasta do projeto no Iluminura.
+2. Mantenha o aplicativo aberto em uma janela separada ou em outra tela.
+3. Execute o agente no terminal do ambiente de desenvolvimento.
+4. Quando um arquivo mudar, use o aviso de disco e a revisão por trechos para aceitar ou rejeitar as alterações.
+5. Use o histórico para restaurar uma versão externa anterior e salve o resultado quando estiver de acordo.
+
+O aplicativo não substitui o terminal nem o agente. Ele oferece a camada visual de leitura, revisão e exportação que falta ao fluxo de edição por linha de comando.
 
 ---
 
