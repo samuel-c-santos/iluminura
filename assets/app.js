@@ -9,7 +9,7 @@
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var Caminhos = window.LeitorCaminhos;
 
-  var APP_VERSION = '1.1.0';
+  var APP_VERSION = '1.2.0';
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
   var LS_RECENT = 'leitormd.recent.v1';
@@ -22,6 +22,7 @@
     highlight: true,
     autopair: true,
     autosave: true,
+    autoReload: true,
     sync: true,
     hardBreak: false,
     mode: 'split',
@@ -52,6 +53,11 @@
     noticeDismissed: false,
     imageCache: new Map(),
     imagePending: new Map(),
+    diskStamp: null,
+    diskNoticeKind: null,
+    diskNoticeStamp: null,
+    diskConflict: false,
+    saving: false,
     dirty: false,
     headings: [],
     lastRender: 0,
@@ -62,6 +68,9 @@
 
   var el = {};
   var editor, preview, previewScroll, hlInner, findbar;
+  var diskObserver = null;
+  var diskPollTimer = null;
+  var diskCheckBusy = false;
 
   /* ------------------------------------------------------------------ *
    * preferências
@@ -110,6 +119,7 @@
     $('#pref-highlight').checked = p.highlight;
     $('#pref-autopair').checked = p.autopair;
     $('#pref-autosave').checked = p.autosave;
+    $('#pref-autoreload').checked = p.autoReload;
     $('#pref-sync').checked = p.sync;
     $('#pref-linebreak').checked = p.hardBreak;
     $('#reading-speed').value = String(p.speed);
@@ -175,6 +185,11 @@
     state.handle = handle || null;
     state.docPath = docPath || null;
     state.noticeDismissed = false;
+    state.diskStamp = null;
+    state.diskNoticeKind = null;
+    state.diskNoticeStamp = null;
+    state.diskConflict = false;
+    state.saving = false;
     if (name) state.name = name;
     editor.value = text;
     editor.setSelectionRange(0, 0);
@@ -185,25 +200,28 @@
     syncHeadingSelect();
     editor.scrollTop = 0;
     previewScroll.scrollTop = 0;
+    hideDiskNotice();
+    startDiskWatch();
   }
 
   /* ------------------------------------------------------------------ *
    * imagens relativas e pasta do documento
    * ------------------------------------------------------------------ */
 
-  function getFileFromRoot(root, relPath) {
+  function getFileHandleFromRoot(root, relPath) {
     var parts = String(relPath || '').split('/').filter(Boolean);
     var name = parts.pop();
     if (!root || !name) return Promise.reject(new Error('Caminho inválido'));
 
-    var dir = root;
-    var chain = Promise.resolve(dir);
+    var chain = Promise.resolve(root);
     parts.forEach(function (part) {
       chain = chain.then(function (d) { return d.getDirectoryHandle(part); });
     });
-    return chain
-      .then(function (d) { return d.getFileHandle(name); })
-      .then(function (h) { return h.getFile(); });
+    return chain.then(function (d) { return d.getFileHandle(name); });
+  }
+
+  function getFileFromRoot(root, relPath) {
+    return getFileHandleFromRoot(root, relPath).then(function (h) { return h.getFile(); });
   }
 
   function loadImageUrl(relPath) {
@@ -393,6 +411,299 @@
       if (found) return found;
     }
     return null;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * sincronização com alterações externas no arquivo
+   * ------------------------------------------------------------------ */
+
+  function diskBound() {
+    return !!(state.handle || (state.dirHandle && state.docPath));
+  }
+
+  function hasLocalEdits() {
+    return state.dirty || (!!editor && editor.value !== state.savedText);
+  }
+
+  function stampOf(file) {
+    return String(file.lastModified || 0) + ':' + String(file.size || 0);
+  }
+
+  async function readDiskSnapshot() {
+    if (!diskBound()) return { status: 'unbound' };
+
+    var handle = null;
+    var error = null;
+
+    if (state.dirHandle && state.docPath) {
+      try {
+        handle = await getFileHandleFromRoot(state.dirHandle, state.docPath);
+      } catch (e) {
+        error = e;
+      }
+    }
+
+    if (!handle && state.handle) {
+      try {
+        await state.handle.getFile();
+        handle = state.handle;
+      } catch (e) {
+        if (!error) error = e;
+      }
+    }
+
+    if (!handle) {
+      return {
+        status: error && error.name === 'NotFoundError' ? 'missing' : 'error',
+        error: error
+      };
+    }
+
+    try {
+      var file = await handle.getFile();
+      return { status: 'ok', handle: handle, file: file };
+    } catch (e) {
+      return {
+        status: e && e.name === 'NotFoundError' ? 'missing' : 'error',
+        error: e
+      };
+    }
+  }
+
+  async function resolveDiskHandle() {
+    var snap = await readDiskSnapshot();
+    return snap.status === 'ok' ? snap.handle : null;
+  }
+
+  function hideDiskNotice() {
+    state.diskNoticeKind = null;
+    var notice = $('#disk-notice');
+    if (notice) notice.hidden = true;
+  }
+
+  function showDiskNotice(kind) {
+    var notice = $('#disk-notice');
+    if (!notice) return;
+
+    state.diskNoticeKind = kind;
+    var text;
+
+    if (kind === 'missing') {
+      text = 'O arquivo "' + state.name + '" não foi encontrado no disco.';
+    } else if (hasLocalEdits()) {
+      text = 'O arquivo "' + state.name + '" mudou no disco. Recarregar substitui suas alterações locais.';
+    } else {
+      text = 'O arquivo "' + state.name + '" mudou no disco.';
+    }
+
+    $('#disk-notice-text').textContent = text;
+    $('#disk-notice-reload').textContent = kind === 'missing' ? 'Salvar como…' : 'Recarregar do disco';
+    notice.hidden = false;
+  }
+
+  function dismissDiskNotice() {
+    state.diskNoticeStamp = state.diskNoticeKind === 'missing' ? 'missing' : state.diskStamp;
+    hideDiskNotice();
+  }
+
+  function applyDiskContent(text, file, handle) {
+    var hadFocus = document.activeElement === editor;
+    var selStart = editor.selectionStart;
+    var selEnd = editor.selectionEnd;
+    var editorTop = editor.scrollTop;
+    var previewTop = previewScroll.scrollTop;
+
+    if (handle) state.handle = handle;
+    clearImageCache();
+    setDoc(text, state.name, state.handle, state.docPath);
+
+    state.diskStamp = stampOf(file);
+    state.diskNoticeStamp = null;
+    state.diskConflict = false;
+    hideDiskNotice();
+
+    var max = editor.value.length;
+    editor.setSelectionRange(Math.min(selStart, max), Math.min(selEnd, max));
+    editor.scrollTop = editorTop;
+    previewScroll.scrollTop = previewTop;
+    syncOverlayScroll();
+    paintSource();
+    syncHeadingSelect();
+    saveDraftNow();
+    if (hadFocus) editor.focus();
+  }
+
+  async function refreshDiskStamp() {
+    var snap = await readDiskSnapshot();
+    if (snap.status !== 'ok') return;
+    if (snap.handle) state.handle = snap.handle;
+    state.diskStamp = stampOf(snap.file);
+    state.diskNoticeStamp = null;
+    state.diskConflict = false;
+    hideDiskNotice();
+  }
+
+  async function checkDiskChange(forceCompare) {
+    if (!diskBound() || state.saving || diskCheckBusy) return;
+
+    diskCheckBusy = true;
+    try {
+      var snap = await readDiskSnapshot();
+
+      if (snap.status === 'unbound' || snap.status === 'error') return;
+
+      if (snap.status === 'missing') {
+        if (state.diskNoticeStamp === 'missing') return;
+        showDiskNotice('missing');
+        return;
+      }
+
+      var stamp = stampOf(snap.file);
+
+      if (!forceCompare && state.diskStamp !== null && stamp === state.diskStamp) return;
+
+      var text = await snap.file.text();
+
+      if (text === editor.value) {
+        state.text = text;
+        state.savedText = text;
+        state.diskStamp = stamp;
+        state.diskNoticeStamp = null;
+        state.diskConflict = false;
+        if (state.dirty) markDirty(false);
+        hideDiskNotice();
+        return;
+      }
+
+      if (text === state.savedText) {
+        state.diskStamp = stamp;
+        state.diskNoticeStamp = null;
+        state.diskConflict = false;
+        hideDiskNotice();
+        return;
+      }
+
+      state.diskStamp = stamp;
+      state.diskConflict = true;
+
+      if (!hasLocalEdits() && state.prefs.autoReload) {
+        applyDiskContent(text, snap.file, snap.handle);
+        toast('Documento atualizado do disco.');
+        return;
+      }
+
+      if (state.diskNoticeStamp === stamp) return;
+      state.diskNoticeStamp = null;
+      showDiskNotice('changed');
+    } finally {
+      diskCheckBusy = false;
+    }
+  }
+
+  async function reloadFromDisk(force) {
+    if (!diskBound()) {
+      toast('Abra o arquivo ou a pasta do documento para atualizar do disco.');
+      return;
+    }
+
+    var snap = await readDiskSnapshot();
+
+    if (snap.status === 'missing') {
+      showDiskNotice('missing');
+      toast('Arquivo não encontrado no disco.');
+      return;
+    }
+
+    if (snap.status !== 'ok') {
+      toast('Não foi possível ler o arquivo do disco.');
+      return;
+    }
+
+    var text;
+    try {
+      text = await snap.file.text();
+    } catch (e) {
+      toast('Não foi possível ler o arquivo do disco.');
+      return;
+    }
+
+    var stamp = stampOf(snap.file);
+
+    if (text === editor.value) {
+      state.text = text;
+      state.savedText = text;
+      state.diskStamp = stamp;
+      state.diskNoticeStamp = null;
+      state.diskConflict = false;
+      if (state.dirty) markDirty(false);
+      hideDiskNotice();
+      toast('O documento já está atualizado.');
+      return;
+    }
+
+    if (hasLocalEdits() && !force) {
+      var ok = window.confirm('Há alterações não salvas em "' + state.name + '". Recarregar do disco e descartar essas alterações?');
+      if (!ok) return;
+    }
+
+    applyDiskContent(text, snap.file, snap.handle);
+    toast('Documento atualizado do disco.');
+  }
+
+  function handleDiskNoticeAction() {
+    if (state.diskNoticeKind === 'missing') {
+      hideDiskNotice();
+      saveDocument(true);
+      return;
+    }
+    reloadFromDisk(true);
+  }
+
+  async function observeCurrentFile() {
+    if (!diskObserver) return;
+    try { diskObserver.disconnect(); } catch (e) {}
+
+    var snap = await readDiskSnapshot();
+    if (snap.status !== 'ok') return;
+
+    try {
+      await diskObserver.observe(snap.handle);
+    } catch (e) {
+      // Observação em tempo real indisponível; a verificação periódica cobre.
+    }
+  }
+
+  function stopDiskWatch() {
+    if (diskPollTimer) {
+      clearInterval(diskPollTimer);
+      diskPollTimer = null;
+    }
+    if (diskObserver) {
+      try { diskObserver.disconnect(); } catch (e) {}
+      diskObserver = null;
+    }
+  }
+
+  function startDiskWatch() {
+    stopDiskWatch();
+    if (!diskBound()) return;
+
+    if (typeof window.FileSystemObserver === 'function') {
+      try {
+        diskObserver = new window.FileSystemObserver(function () {
+          checkDiskChange();
+        });
+        observeCurrentFile();
+      } catch (e) {
+        diskObserver = null;
+      }
+    }
+
+    diskPollTimer = setInterval(function () {
+      if (document.visibilityState === 'visible') checkDiskChange();
+    }, 1000);
+
+    checkDiskChange();
   }
 
   /* ------------------------------------------------------------------ *
@@ -605,6 +916,9 @@
       var file = await handle.getFile();
       var text = await file.text();
       setDoc(text, file.name, handle, docPath || null);
+      state.diskStamp = stampOf(file);
+      state.diskNoticeStamp = null;
+      hideDiskNotice();
       addRecent(file.name, text);
       toast('Aberto: ' + file.name);
     } catch (err) {
@@ -613,24 +927,43 @@
   }
 
   async function saveDocument(forceSaveAs) {
-    if (state.handle && !forceSaveAs) {
-      try {
-        var writable = await state.handle.createWritable();
-        await writable.write(new Blob([state.text], { type: 'text/markdown' }));
-        await writable.close();
-        state.savedText = state.text;
-        markDirty(false);
-        addRecent(state.name, state.text);
-        toast('Salvo em ' + state.name);
-        return;
-      } catch (err) {
-        if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
-          try {
-            var perm = await state.handle.requestPermission({ mode: 'readwrite' });
-            if (perm === 'granted') return saveDocument(forceSaveAs);
-          } catch (e) {}
+    if (!forceSaveAs) {
+      if (state.diskConflict) {
+        var proceed = window.confirm('O arquivo "' + state.name + '" foi alterado no disco depois que você começou a editar. Salvar agora substitui a versão externa. Continuar?');
+        if (!proceed) return;
+        state.diskConflict = false;
+      }
+
+      var target = await resolveDiskHandle();
+      /* arquivo recém-criado pelo seletor pode ainda não ser legível */
+      if (!target && state.handle) target = state.handle;
+      if (target) {
+        state.saving = true;
+        var content = state.text;
+        try {
+          var writable = await target.createWritable();
+          await writable.write(new Blob([content], { type: 'text/markdown' }));
+          await writable.close();
+
+          state.handle = target;
+          state.savedText = content;
+          markDirty(state.text !== content);
+          addRecent(state.name, content);
+          state.saving = false;
+          await refreshDiskStamp();
+          startDiskWatch();
+          toast('Salvo em ' + state.name);
+          return;
+        } catch (err) {
+          state.saving = false;
+          if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+            try {
+              var perm = await target.requestPermission({ mode: 'readwrite' });
+              if (perm === 'granted') return saveDocument(forceSaveAs);
+            } catch (e) {}
+          }
+          toast('Falha ao salvar; exportando uma cópia.');
         }
-        toast('Falha ao salvar; exportando uma cópia.');
       }
     }
 
@@ -642,6 +975,11 @@
         });
         state.handle = handle;
         state.name = handle.name;
+        state.docPath = null;
+        state.diskStamp = null;
+        state.diskNoticeStamp = null;
+        state.diskConflict = false;
+        hideDiskNotice();
         document.title = state.name + ' — leitor_md';
         return saveDocument(false);
       } catch (err) {
@@ -707,6 +1045,8 @@
         clearImageCache();
         renderNow();
       }
+
+      startDiskWatch();
 
       if (!bound && !bind) toast('Pasta aberta: ' + root.name);
     } catch (err) {
@@ -931,6 +1271,7 @@
     openFolderImages: function () { openFolder(true); },
     save: function () { saveDocument(false); },
     saveAs: function () { saveDocument(true); },
+    reloadDisk: function () { reloadFromDisk(false); },
     exportHtml: exportHtml,
     exportPdf: function () { window.print(); },
     copyHtml: copyHtml,
@@ -1009,6 +1350,7 @@
     open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2h9v10h-17z"/></svg>',
     openFolder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2h9v10h-17z"/><path d="M12 13v4M10 15h4"/></svg>',
     save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h11l3 3v14H5z"/><path d="M8.5 3.5v6h7v-6M8.5 20.5v-6h7v6"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 5v5h-5"/><path d="M4 19v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.4-2.6L20 10"/><path d="M17.9 15a7 7 0 0 1-11.4 2.6L4 14"/></svg>',
     print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8.5v-5h10v5M5 8.5h14v8h-3M8 20.5h8v-7H8z"/></svg>',
     undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4.5 11.5 9 16"/><path d="M4.5 11.5H14a5.5 5.5 0 0 1 0 11h-2"/></svg>',
     redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 7 4.5 4.5L15 16"/><path d="M19.5 11.5H10a5.5 5.5 0 0 0 0 11h2"/></svg>',
@@ -1048,6 +1390,7 @@
         { cmd: 'open', icon: 'open', title: 'Abrir arquivo (Ctrl+O)' },
         { cmd: 'openFolder', icon: 'openFolder', title: 'Abrir pasta' },
         { cmd: 'save', icon: 'save', title: 'Salvar (Ctrl+S)' },
+        { cmd: 'reloadDisk', icon: 'refresh', title: 'Atualizar do disco (F5)' },
         { cmd: 'exportPdf', icon: 'print', title: 'Imprimir / PDF (Ctrl+P)' }
       ]
     },
@@ -1210,6 +1553,7 @@
           { sep: true },
           { label: 'Salvar', key: 'Ctrl+S', cmd: 'save' },
           { label: 'Salvar como…', key: 'Ctrl+Shift+S', cmd: 'saveAs' },
+          { label: 'Atualizar do disco', key: 'F5', cmd: 'reloadDisk' },
           { sep: true },
           { label: 'Exportar como HTML', cmd: 'exportHtml' },
           { label: 'Exportar como PDF / imprimir', key: 'Ctrl+P', cmd: 'exportPdf' },
@@ -1629,13 +1973,17 @@
   }
 
   var draftTimer = null;
+  function saveDraftNow() {
+    if (!state.prefs.autosave) return;
+    clearTimeout(draftTimer);
+    try {
+      localStorage.setItem(LS_DRAFT, JSON.stringify({ name: state.name, text: state.text, at: Date.now() }));
+    } catch (e) {}
+  }
+
   function scheduleDraft() {
     clearTimeout(draftTimer);
-    draftTimer = setTimeout(function () {
-      try {
-        localStorage.setItem(LS_DRAFT, JSON.stringify({ name: state.name, text: state.text, at: Date.now() }));
-      } catch (e) {}
-    }, 800);
+    draftTimer = setTimeout(saveDraftNow, 800);
   }
 
   var PAIRS = {
@@ -1970,6 +2318,7 @@
     ['Modo foco', 'Ctrl+Shift+F'],
     ['Barra lateral', 'Ctrl+Shift+1'],
     ['Barra de ferramentas', 'Ctrl+Shift+T'],
+    ['Atualizar do disco', 'F5'],
     ['Zoom', 'Ctrl+= / Ctrl+-'],
     ['Imprimir / PDF', 'Ctrl+P'],
     ['Atalhos', 'F1']
@@ -2064,6 +2413,12 @@
     });
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'F5' && diskBound() && !$('.modal-backdrop.on') &&
+          !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        reloadFromDisk(false);
+        return;
+      }
       if (e.key === 'Escape') {
         closeMenus();
         if (findbar.classList.contains('on')) closeFind();
@@ -2131,6 +2486,17 @@
       });
     }
 
+    /* aviso de alteração externa no arquivo */
+    var diskReload = $('#disk-notice-reload');
+    if (diskReload) diskReload.addEventListener('click', handleDiskNoticeAction);
+    var diskClose = $('#disk-notice-close');
+    if (diskClose) diskClose.addEventListener('click', dismissDiskNotice);
+
+    window.addEventListener('focus', function () { checkDiskChange(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') checkDiskChange();
+    });
+
     document.addEventListener('fullscreenchange', syncToolbarState);
 
     /* localizar */
@@ -2164,6 +2530,11 @@
     $('#pref-highlight').addEventListener('change', function (e) { setPref('highlight', e.target.checked); });
     $('#pref-autopair').addEventListener('change', function (e) { setPref('autopair', e.target.checked); });
     $('#pref-autosave').addEventListener('change', function (e) { setPref('autosave', e.target.checked); });
+    $('#pref-autoreload').addEventListener('change', function (e) {
+      setPref('autoReload', e.target.checked);
+      if (e.target.checked) checkDiskChange(true);
+      toast(e.target.checked ? 'Atualização automática ativada.' : 'Atualização automática desativada.');
+    });
     $('#pref-sync').addEventListener('change', function (e) { setPref('sync', e.target.checked); });
     $('#pref-linebreak').addEventListener('change', function (e) {
       setPref('hardBreak', e.target.checked);

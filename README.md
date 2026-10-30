@@ -58,7 +58,14 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **Diagnóstico Visual**: imagens ausentes recebem um espaço reservado com o nome do arquivo, e um aviso acionável indica quantas não foram carregadas.
 - **Exportação Autônoma**: imagens resolvidas são embutidas em Base64 no HTML exportado, produzindo um arquivo único e portátil.
 
-### 2.5 Exportação
+### 2.5 Sincronização com Alterações Externas
+- **Atualização Automática**: enquanto o documento está vinculado ao disco, o leitor detecta alterações feitas por outros programas — como agentes de IA — e recarrega o conteúdo quando não há edições locais pendentes.
+- **Proteção contra Sobrescrita**: se existirem alterações não salvas no editor, o texto local é preservado e um aviso oferece a recarga explícita do arquivo. Ao salvar com uma versão externa pendente, o leitor pede confirmação antes de substituí-la.
+- **Atualização Manual**: o botão “Atualizar do disco” na faixa Arquivo e a tecla `F5` releem o arquivo a qualquer momento.
+- **Detecção**: utiliza `FileSystemObserver` quando disponível, com verificação periódica de baixo custo como alternativa, inclusive ao retornar o foco para a janela.
+- **Preferência**: a atualização automática pode ser desativada no painel de Preferências.
+
+### 2.6 Exportação
 - **HTML Autônomo**: Documento compilado contendo folhas de estilo e imagens embutidas (codificação Base64).
 - **PDF**: Folha de estilos otimizada para impressão via motor nativo do navegador (`@media print`).
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
@@ -82,6 +89,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 | Alternar modo foco | `Ctrl + Shift + F` |
 | Alternar painel lateral | `Ctrl + Shift + 1` |
 | Alternar barra de ferramentas | `Ctrl + Shift + T` |
+| Atualizar do disco | `F5` |
 | Inserir bloco de código | `Ctrl + Shift + K` |
 | Inserir bloco matemático | `Ctrl + Shift + M` |
 | Imprimir / Exportar PDF | `Ctrl + P` |
@@ -128,7 +136,8 @@ A rotina avalia 30 asserções do analisador, cobrindo processamento de blocos, 
 
 - **Modelo de Visualização**: A interface utiliza arquitetura de painel duplo (editor de texto e painel de renderização) ou visualização alternada, não empregando edição direta *in-place* no documento renderizado.
 - **Diagramas Vetoriais**: Sintaxes baseadas em bibliotecas externas (como Mermaid ou PlantUML) não são processadas graficamente, permanecendo como blocos de código formatados.
-- **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais e a resolução de imagens relativas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
+- **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
+- **Vínculo para Atualização Externa**: a sincronização exige um identificador de arquivo ou pasta concedido pela File System Access API. Documentos abertos pelo seletor clássico de arquivos, por rascunho ou por conteúdo colado não têm vínculo com o disco e precisam ser reabertos para refletir mudanças externas.
 - **Desempenho de Realce**: Documentos que excedem o limiar de 2.500 linhas têm a camada de realce do editor temporariamente desativada durante a digitação para preservar a taxa de quadros e a responsividade da entrada.
 
 ---

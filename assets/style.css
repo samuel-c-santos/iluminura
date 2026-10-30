@@ -553,7 +553,8 @@ button { cursor: pointer; }
 
 /* ----------------------------------------------------------- preview -- */
 
-.doc-notice {
+.doc-notice,
+.disk-notice {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -565,7 +566,26 @@ button { cursor: pointer; }
   font-size: 11.5px;
 }
 
-.doc-notice[hidden] { display: none; }
+.doc-notice[hidden],
+.disk-notice[hidden] { display: none; }
+
+.disk-notice {
+  background: color-mix(in srgb, #f59e0b 14%, var(--bg-soft));
+  border-bottom-color: color-mix(in srgb, #f59e0b 32%, var(--border));
+}
+
+.disk-notice .doc-notice-icon {
+  color: color-mix(in srgb, #f59e0b 72%, var(--fg));
+}
+
+.disk-notice .doc-notice-action {
+  color: color-mix(in srgb, #b45309 82%, var(--fg));
+}
+
+[data-theme="escuro"] .disk-notice .doc-notice-action,
+[data-theme="sepia"] .disk-notice .doc-notice-action {
+  color: color-mix(in srgb, #f59e0b 82%, var(--fg));
+}
 
 .doc-notice-icon {
   display: inline-flex;
@@ -575,7 +595,8 @@ button { cursor: pointer; }
 
 .doc-notice-icon svg { width: 15px; height: 15px; }
 
-#doc-notice-text {
+#doc-notice-text,
+#disk-notice-text {
   flex: 1 1 auto;
   line-height: 1.4;
 }
@@ -1107,7 +1128,7 @@ kbd {
 
 @media print {
   .menubar, .toolbar, .sidebar, .statusbar, .findbar,
-  .modal-backdrop, .toast, .drop-overlay, .doc-notice, .pane-editor { display: none !important; }
+  .modal-backdrop, .toast, .drop-overlay, .doc-notice, .disk-notice, .pane-editor { display: none !important; }
 
   html, body, .app, .workspace, .panes, .pane, .preview-scroll {
     height: auto !important;
