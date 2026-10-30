@@ -4,10 +4,6 @@ Aplicativo web local e autônomo para leitura, escrita e renderização de docum
 
 ![Iluminura](assets/logo.svg)
 
-*Markdown local, visual e livre.*
-
-Projetado para quem prefere acompanhar documentos de forma visual — como em leitores focados em escrita, a exemplo do Typora — e para quem trabalha com agentes de IA no terminal e quer ver o projeto mudando em tempo real, sem abrir um editor de código completo.
-
 ---
 
 ## 1. Visão Geral
@@ -22,7 +18,7 @@ O sistema pode ser executado através de três métodos:
 | --- | --- | --- |
 | Servidor local integrado | Executar `iniciar.bat` ou `node servidor.js` | Disponibiliza a interface em `http://127.0.0.1:8731`. Habilita acesso completo à File System Access API para manipulação direta de arquivos e pastas no disco. |
 | Linha de comando direta | `node servidor.js [porta]` | Permite customização da porta de escuta do serviço HTTP estático local. |
-| Carregamento estático | Abrir `index.html` diretamente | Execução em protocolo `file://`. A persistência opera via seletor tradicional de arquivos (Blob/download) e cache via Web Storage API (`localStorage`). |
+| Carregamento estático | Abrir `index.html` diretamente | Execução em protocolo `file://`. A persistência opera via seletor tradicional de arquivos (Blob/download) e cache via Web Storage API (`localStorage`). A instalação PWA e o service worker não funcionam nesse protocolo. |
 
 ---
 
@@ -30,9 +26,11 @@ O sistema pode ser executado através de três métodos:
 
 ### 2.1 Interface e Modos de Operação
 - **Barra de Ferramentas em Faixas**: comandos organizados por contexto (Arquivo, Histórico, Texto, Parágrafo, Inserir e Exibir), no estilo de uma faixa de escritório, com ícones, dicas de atalho e estados ativos.
-- **Barra Lateral Recolhível**: o painel de Esboço e Arquivos pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
+- **Barra Lateral Recolhível**: o painel de Esboço, Arquivos e Buscar pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
 - **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
-- **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica e barra de progresso) e modo Código-Fonte puro.
+- **Busca Global**: a aba Buscar localiza texto e nomes de arquivo em toda a pasta aberta, com busca sem acentos e abertura direta no trecho encontrado.
+- **Instalação PWA**: manifesto e service worker permitem instalar o aplicativo e abri-lo offline após a primeira visita. O cache local é atualizado pela rede quando o servidor está disponível.
+- **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica) e modo Código-Fonte puro.
 - **Estruturação de Documento**: Extração e renderização dinâmica do índice hierárquico (TOC) com suporte a níveis de cabeçalho `H1` a `H6`.
 - **Métricas Textuais**: Contagem em tempo real de palavras, caracteres totais, caracteres sem espaço, linhas e parágrafos. Estimativa de tempo de leitura configurável (120, 240 ou 382 palavras por minuto).
 - **Temas e Tipografia**: Três variantes de interface (Claro, Escuro e Sépia) e três famílias tipográficas (Sem Serifa, Serifada e Monoespaçada).
@@ -67,7 +65,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - **Exportação Autônoma**: imagens resolvidas são embutidas em Base64 no HTML exportado, produzindo um arquivo único e portátil.
 
 ### 2.5 Sincronização com Alterações Externas
-- **Atualização Automática**: enquanto o documento está vinculado ao disco, o leitor detecta alterações feitas por outros programas — como agentes de IA — e recarrega o conteúdo quando não há edições locais pendentes.
+- **Atualização Automática**: enquanto o documento está vinculado ao disco, o leitor detecta alterações feitas por outros programas, como agentes de IA, e recarrega o conteúdo quando não há edições locais pendentes.
 - **Proteção contra Sobrescrita**: se existirem alterações não salvas no editor, o texto local é preservado e um aviso oferece a recarga explícita do arquivo. Ao salvar com uma versão externa pendente, o leitor pede confirmação antes de substituí-la.
 - **Atualização Manual**: o botão “Atualizar do disco” na faixa Arquivo e a tecla `F5` releem o arquivo a qualquer momento.
 - **Detecção**: utiliza `FileSystemObserver` quando disponível, com verificação periódica de baixo custo como alternativa, inclusive ao retornar o foco para a janela.
@@ -75,6 +73,8 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 
 ### 2.6 Exportação
 - **HTML Autônomo**: Documento compilado contendo folhas de estilo, imagens embutidas (codificação Base64) e diagramas Mermaid já convertidos em SVG.
+- **DOCX**: Pacote OOXML com títulos, parágrafos, listas, tabelas, links, blocos de código e imagens. Diagramas Mermaid são rasterizados para PNG antes da montagem.
+- **EPUB**: Pacote EPUB 3 com capítulo XHTML, sumário de títulos, folha de estilo, imagens e diagramas Mermaid em SVG inline.
 - **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, os diagramas são renderizados no tema claro e há margens de página, controle de quebras e preservação de cores e blocos de código.
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
 
@@ -91,6 +91,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 | Refazer | `Ctrl + Y` ou `Ctrl + Shift + Z` |
 | Localizar no texto | `Ctrl + F` |
 | Substituir no texto | `Ctrl + H` |
+| Buscar na pasta | `Ctrl + Shift + G` |
 | Aplicar negrito | `Ctrl + B` |
 | Aplicar itálico | `Ctrl + I` |
 | Inserir link | `Ctrl + K` |
@@ -113,12 +114,16 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 ```
 iluminura/
 ├── index.html              Interface gráfica do usuário e estrutura dos painéis
+├── manifest.webmanifest    Metadados de instalação do aplicativo web
+├── sw.js                   Service worker de cache e funcionamento offline
 ├── assets/
 │   ├── markdown.js         Analisador sintático, gerador de AST e motor de realce
 │   ├── caminhos.js         Resolução segura de caminhos relativos de imagens
 │   ├── app.js              Controlador de estado, manipulação de arquivos e eventos
+│   ├── exportar.js         Geração de pacotes DOCX e EPUB no navegador
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
 │   ├── logo.svg            Identificador visual vetorial
+│   ├── icons/              Ícones de instalação em 192 e 512 pixels
 │   └── vendor/
 │       ├── mermaid.min.js  Biblioteca opcional de diagramas, carregada sob demanda
 │       └── LICENSE-mermaid Licença MIT da biblioteca Mermaid
@@ -127,7 +132,8 @@ iluminura/
 ├── exemplo.md              Documento de validação de sintaxe e referência
 ├── testes/
 │   ├── markdown.test.js    Suíte de testes automatizados do analisador
-│   └── caminhos.test.js    Testes de resolução de caminhos relativos
+│   ├── caminhos.test.js    Testes de resolução de caminhos relativos
+│   └── e2e/run.js          Testes de integração no navegador
 └── LICENSE                 Termos da licença MIT
 ```
 
@@ -140,9 +146,12 @@ A integridade do motor de análise léxica e sintática é validada por meio de 
 ```bash
 node testes/markdown.test.js
 node testes/caminhos.test.js
+node testes/e2e/run.js
 ```
 
-A rotina avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
+A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
+
+O teste E2E requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão e abertura offline. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
 
 ---
 
@@ -150,6 +159,9 @@ A rotina avalia 31 asserções do analisador, cobrindo processamento de blocos, 
 
 - **Modelo de Visualização**: A interface utiliza arquitetura de painel duplo (editor de texto e painel de renderização) ou visualização alternada, não empregando edição direta *in-place* no documento renderizado.
 - **Diagramas**: Mermaid é suportado por uma cópia local da biblioteca oficial (aprox. 3,5 MB), carregada sob demanda apenas em documentos com blocos `mermaid`. Outras sintaxes, como PlantUML, permanecem como blocos de código. O tema dos diagramas acompanha a interface.
+- **PWA e Uso Offline**: o service worker exige contexto seguro, como `localhost` ou HTTPS. O aplicativo abre offline após a primeira visita; a biblioteca Mermaid entra no cache depois do primeiro diagrama renderizado. A instalação depende do suporte e das permissões do navegador.
+- **Busca Global**: a varredura da pasta limita a profundidade a 6 níveis e o total a 800 entradas, 24 MB de conteúdo e 150 resultados. Pastas ocultas e `node_modules` são ignoradas.
+- **Exportação DOCX e EPUB**: a conversão preserva a estrutura textual, listas, tabelas, links, blocos de código, imagens e diagramas, mas não reproduz integralmente o CSS da pré-visualização. Fórmulas matemáticas são exportadas como texto e recursos interativos de diagramas não são mantidos.
 - **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
 - **Vínculo para Atualização Externa**: a sincronização exige um identificador de arquivo ou pasta concedido pela File System Access API. Documentos abertos pelo seletor clássico de arquivos, por rascunho ou por conteúdo colado não têm vínculo com o disco e precisam ser reabertos para refletir mudanças externas.
 - **Desempenho de Realce**: Documentos que excedem o limiar de 2.500 linhas têm a camada de realce do editor temporariamente desativada durante a digitação para preservar a taxa de quadros e a responsividade da entrada.

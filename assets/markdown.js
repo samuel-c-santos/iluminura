@@ -1,5 +1,5 @@
 /*
- * leitor_md — motor Markdown
+ * Iluminura: motor Markdown
  * Implementação própria, sem dependências, sem build.
  * Licença MIT.
  */

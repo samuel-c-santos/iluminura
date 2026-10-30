@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Iluminura — servidor estático mínimo (sem dependências)
+ * Iluminura: servidor estático mínimo (sem dependências)
  * Uso: node servidor.js [porta]
  * Necessário apenas para recursos que exigem contexto seguro
  * (abrir/salvar arquivos e pastas via File System Access API).
@@ -20,6 +20,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
@@ -89,5 +90,6 @@ server.listen(PORT, '127.0.0.1', () => {
     : process.platform === 'darwin' ? `open "${url}"`
     : `xdg-open "${url}"`;
 
+  if (process.env.ILUMINURA_NO_OPEN === '1') return;
   exec(opener, () => {});
 });

@@ -9,7 +9,7 @@
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var Caminhos = window.LeitorCaminhos;
 
-  var APP_VERSION = '1.4.0';
+  var APP_VERSION = '1.5.0';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -65,13 +65,33 @@
     lastRender: 0,
     syncing: null,
     find: { matches: [], index: -1 },
-    openTab: 'outline'
+    openTab: 'outline',
+    search: {
+      query: '',
+      results: [],
+      seq: 0,
+      busy: false,
+      summary: '',
+      truncated: false,
+      filesScanned: 0
+    }
   };
 
   var el = {};
   var editor, preview, previewScroll, hlInner, findbar;
   var appliedTheme = null;
+  var deferredInstallPrompt = null;
   var diskObserver = null;
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredInstallPrompt = null;
+    toast('Iluminura instalado.');
+  });
   var diskPollTimer = null;
   var diskCheckBusy = false;
 
@@ -574,7 +594,7 @@
       securityLevel: 'strict',
       theme: theme,
       fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-      flowchart: { useMaxWidth: true, htmlLabels: true },
+      flowchart: { useMaxWidth: true, htmlLabels: false },
       sequence: { useMaxWidth: true },
       gantt: { useMaxWidth: true },
       journey: { useMaxWidth: true },
@@ -1299,8 +1319,7 @@
     toast('Arquivo baixado: ' + state.name);
   }
 
-  function downloadText(text, name, mime) {
-    var blob = new Blob([text], { type: mime });
+  function downloadBlob(blob, name) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -1309,6 +1328,10 @@
     a.click();
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function downloadText(text, name, mime) {
+    downloadBlob(new Blob([text], { type: mime }), name);
   }
 
   /* --------------------------------------------------- pastas / árvore -- */
@@ -1330,6 +1353,11 @@
 
       state.dirHandle = root;
       state.fileTree = await readDirectory(root, 0, '');
+      state.search.seq++;
+      state.search.busy = false;
+      state.search.results = [];
+      state.search.filesScanned = 0;
+      state.search.truncated = false;
       switchTab('files');
 
       var bind = !!bindCurrent || (!state.docPath && hasRelativeImages());
@@ -1582,6 +1610,8 @@
     reloadDisk: function () { reloadFromDisk(false); },
     exportHtml: exportHtml,
     exportPdf: function () { printDocument(); },
+    exportDocx: function () { exportOffice('docx'); },
+    exportEpub: function () { exportOffice('epub'); },
     copyHtml: copyHtml,
     closeDoc: function () { if (confirmDiscard()) newDocument(); },
 
@@ -1589,6 +1619,7 @@
     redo: redoEdit,
     find: function () { openFind(); },
     replace: function () { openFind(true); },
+    globalFind: globalFind,
     selectAll: function () { editor.focus(); editor.select(); },
 
     h1: function () { toggleHeading(1); },
@@ -1648,6 +1679,7 @@
     theme: function (value) { setPref('theme', value); },
     prefs: function () { openModal('modal-prefs'); },
     shortcuts: function () { openModal('modal-shortcuts'); },
+    installApp: installApp,
     about: function () { openModal('modal-about'); }
   };
 
@@ -1864,6 +1896,8 @@
           { label: 'Atualizar do disco', key: 'F5', cmd: 'reloadDisk' },
           { sep: true },
           { label: 'Exportar como HTML', cmd: 'exportHtml' },
+          { label: 'Exportar como DOCX', cmd: 'exportDocx' },
+          { label: 'Exportar como EPUB', cmd: 'exportEpub' },
           { label: 'Exportar como PDF / imprimir', key: 'Ctrl+P', cmd: 'exportPdf' },
           { label: 'Copiar HTML', cmd: 'copyHtml' },
           { sep: true },
@@ -1881,6 +1915,7 @@
           { sep: true },
           { label: 'Localizar…', key: 'Ctrl+F', cmd: 'find' },
           { label: 'Localizar e substituir…', key: 'Ctrl+H', cmd: 'replace' },
+          { label: 'Buscar na pasta', key: 'Ctrl+Shift+G', cmd: 'globalFind' },
           { sep: true },
           { label: 'Selecionar tudo', key: 'Ctrl+A', cmd: 'selectAll' }
         ]
@@ -1946,6 +1981,8 @@
         items: [
           { label: 'Atalhos de teclado', key: 'F1', cmd: 'shortcuts' },
           { label: 'Preferências…', key: 'Ctrl+,', cmd: 'prefs' },
+          { sep: true },
+          { label: 'Instalar aplicativo', cmd: 'installApp' },
           { sep: true },
           { label: 'Sobre o Iluminura', cmd: 'about' }
         ]
@@ -2040,12 +2077,26 @@
       b.classList.toggle('active', b.dataset.tab === tab);
     });
     if (tab === 'outline') buildOutline();
-    else renderFiles();
+    else if (tab === 'files') renderFiles();
+    else renderSearch();
+
+    if (tab === 'search') {
+      var input = $('#global-search-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+      if (state.dirHandle && state.search.query.trim().length >= 2 &&
+          !state.search.results.length && !state.search.busy && !state.search.filesScanned) {
+        runGlobalSearch(state.search.query);
+      }
+    }
   }
 
   function renderSidebar() {
     if (state.openTab === 'outline') buildOutline();
-    else renderFiles();
+    else if (state.openTab === 'files') renderFiles();
+    else renderSearch();
   }
 
   function wireSidebar() {
@@ -2058,6 +2109,25 @@
       if (!btn) return;
 
       if (btn.dataset.act === 'open-folder') { openFolder(false); return; }
+
+      if (btn.dataset.act === 'search-clear') {
+        var searchInput = $('#global-search-input');
+        if (searchInput) searchInput.value = '';
+        state.search.seq++;
+        state.search.busy = false;
+        state.search.query = '';
+        state.search.results = [];
+        state.search.summary = '';
+        state.search.truncated = false;
+        renderSearchResults();
+        if (searchInput) searchInput.focus();
+        return;
+      }
+
+      if (btn.dataset.act === 'search-result') {
+        openSearchResult(Number(btn.dataset.i));
+        return;
+      }
 
       if (btn.dataset.act === 'recent') { openRecent(Number(btn.dataset.i)); return; }
 
@@ -2080,7 +2150,410 @@
         goToHeading(Number(btn.dataset.index));
       }
     });
+
+    $('#sidebar-body').addEventListener('input', function (e) {
+      if (e.target.id !== 'global-search-input') return;
+      state.search.query = e.target.value;
+      state.search.seq++;
+
+      if (state.search.query.trim().length < 2) {
+        state.search.busy = false;
+        state.search.results = [];
+        state.search.truncated = false;
+      } else {
+        state.search.busy = true;
+        state.search.results = [];
+        state.search.filesScanned = 0;
+        state.search.truncated = false;
+      }
+
+      renderSearchResults();
+      scheduleGlobalSearch();
+    });
+
+    $('#sidebar-body').addEventListener('keydown', function (e) {
+      if (e.target.id !== 'global-search-input') return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.target.value = '';
+        state.search.seq++;
+        state.search.busy = false;
+        state.search.query = '';
+        state.search.results = [];
+        state.search.summary = '';
+        state.search.truncated = false;
+        renderSearchResults();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runGlobalSearch(state.search.query);
+      }
+    });
   }
+
+  /* ------------------------------------------------------------------ *
+   * busca global na pasta
+   * ------------------------------------------------------------------ */
+
+  var globalSearchTimer = null;
+  var SEARCH_LIMIT = 150;
+  var SEARCH_MAX_FILES = 800;
+  var SEARCH_MAX_BYTES = 24 * 1024 * 1024;
+  var SEARCH_FILE_MAX = 2 * 1024 * 1024;
+
+  function foldForSearch(text) {
+    var out = '';
+    var map = [];
+
+    for (var i = 0; i < text.length; i++) {
+      var folded = text[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      for (var j = 0; j < folded.length; j++) {
+        out += folded[j];
+        map.push(i);
+      }
+    }
+
+    return { text: out, map: map };
+  }
+
+  function buildLineStarts(text) {
+    var starts = [0];
+    for (var i = 0; i < text.length; i++) {
+      if (text.charCodeAt(i) === 10) starts.push(i + 1);
+    }
+    return starts;
+  }
+
+  function lineIndexAt(starts, offset) {
+    var lo = 0;
+    var hi = starts.length - 1;
+
+    while (lo < hi) {
+      var mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+
+    return lo;
+  }
+
+  function renderSearch() {
+    var body = $('#sidebar-body');
+    if (!body) return;
+
+    body.innerHTML =
+      '<div class="sidebar-search">' +
+        '<div class="sidebar-search-box">' +
+          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3 3"/></svg>' +
+          '<input id="global-search-input" type="search" placeholder="Buscar na pasta" autocomplete="off" spellcheck="false" aria-label="Buscar na pasta">' +
+          '<button type="button" class="sidebar-search-clear" data-act="search-clear" title="Limpar busca" aria-label="Limpar busca">×</button>' +
+        '</div>' +
+        '<div class="sidebar-search-status" id="global-search-status"></div>' +
+        '<div class="sidebar-search-results" id="global-search-results"></div>' +
+      '</div>';
+
+    var input = $('#global-search-input');
+    if (input) input.value = state.search.query;
+    renderSearchResults();
+  }
+
+  function searchResultHtml(results) {
+    return results.map(function (r, i) {
+      var head = escapeHtml(r.name) +
+        '<span>' + (r.line ? 'linha ' + r.line : 'arquivo') + '</span>';
+      var path = r.path === r.name
+        ? ''
+        : '<span class="search-result-path">' + escapeHtml(r.path) + '</span>';
+      var snippet = '';
+
+      if (r.kind === 'content') {
+        var before = escapeHtml(r.lineText.slice(0, r.matchStart));
+        var match = escapeHtml(r.lineText.slice(r.matchStart, r.matchStart + r.matchLength));
+        var after = escapeHtml(r.lineText.slice(r.matchStart + r.matchLength));
+        snippet = '<span class="search-result-line">' + before + '<mark>' + match + '</mark>' + after + '</span>';
+      }
+
+      return '<button type="button" class="search-result" data-act="search-result" data-i="' + i +
+        '" data-path="' + escapeHtml(r.path) + '">' +
+        '<span class="search-result-head">' + head + '</span>' +
+        path +
+        snippet +
+        '</button>';
+    }).join('');
+  }
+
+  function renderSearchResults() {
+    var status = $('#global-search-status');
+    var list = $('#global-search-results');
+    if (!status || !list) return;
+
+    var query = state.search.query.trim();
+
+    if (!state.dirHandle) {
+      status.textContent = '';
+      list.innerHTML = '<div class="search-empty">Abra uma pasta para buscar em vários arquivos.' +
+        '<br><button type="button" class="search-action" data-act="open-folder">Abrir pasta</button></div>';
+      return;
+    }
+
+    if (query.length < 2) {
+      status.textContent = 'Digite ao menos 2 caracteres.';
+      list.innerHTML = '';
+      return;
+    }
+
+    var results = state.search.results;
+
+    if (state.search.busy) {
+      status.textContent = 'Buscando...' +
+        (results.length ? ' ' + results.length + ' resultado' + (results.length === 1 ? '' : 's') + ' até agora' : '');
+      list.innerHTML = results.length ? searchResultHtml(results) : '';
+      return;
+    }
+
+    if (!results.length) {
+      status.textContent = state.search.filesScanned
+        ? 'Nenhum resultado em ' + state.search.filesScanned + ' arquivo' + (state.search.filesScanned === 1 ? '' : 's') + '.'
+        : 'Nenhum arquivo de texto encontrado.';
+      list.innerHTML = '';
+      return;
+    }
+
+    status.textContent = results.length + ' resultado' + (results.length === 1 ? '' : 's') +
+      ' em ' + state.search.filesScanned + ' arquivo' + (state.search.filesScanned === 1 ? '' : 's') +
+      (state.search.truncated ? ' (busca limitada)' : '');
+
+    list.innerHTML = searchResultHtml(results);
+  }
+
+  function scheduleGlobalSearch() {
+    clearTimeout(globalSearchTimer);
+
+    var query = state.search.query.trim();
+    if (query.length < 2 || !state.dirHandle) return;
+
+    globalSearchTimer = setTimeout(function () {
+      globalSearchTimer = null;
+      runGlobalSearch(query);
+    }, 320);
+  }
+
+  async function collectSearchFiles(root, base, depth, budget, out) {
+    if (depth > 6 || budget.visited >= SEARCH_MAX_FILES) {
+      state.search.truncated = true;
+      return;
+    }
+
+    var entries = [];
+    try {
+      for await (var entry of root.values()) entries.push(entry);
+    } catch (e) {
+      return;
+    }
+
+    for (var i = 0; i < entries.length; i++) {
+      if (budget.visited >= SEARCH_MAX_FILES) {
+        state.search.truncated = true;
+        return;
+      }
+
+      var item = entries[i];
+      if (item.name.startsWith('.') || item.name === 'node_modules') continue;
+
+      budget.visited++;
+      var path = base ? base + '/' + item.name : item.name;
+
+      if (item.kind === 'file') {
+        if (/\.(md|markdown|mdown|mkd|txt)$/i.test(item.name)) {
+          out.push({ handle: item, path: path, name: item.name });
+        }
+      } else if (item.kind === 'directory') {
+        await collectSearchFiles(item, path, depth + 1, budget, out);
+      }
+    }
+  }
+
+  async function runGlobalSearch(rawQuery) {
+    var query = String(rawQuery || '').trim();
+    if (query.length < 2 || !state.dirHandle) {
+      renderSearchResults();
+      return;
+    }
+
+    clearTimeout(globalSearchTimer);
+    globalSearchTimer = null;
+
+    var seq = ++state.search.seq;
+    var results = [];
+
+    state.search.busy = true;
+    state.search.results = [];
+    state.search.filesScanned = 0;
+    state.search.truncated = false;
+    renderSearchResults();
+
+    var foldedQuery = foldForSearch(query).text;
+    if (!foldedQuery) {
+      state.search.busy = false;
+      renderSearchResults();
+      return;
+    }
+
+    var files = [];
+    var budget = { visited: 0 };
+
+    try {
+      await collectSearchFiles(state.dirHandle, '', 0, budget, files);
+
+      if (seq !== state.search.seq) return;
+
+      var totalBytes = 0;
+
+      for (var i = 0; i < files.length; i++) {
+        if (seq !== state.search.seq) return;
+        if (results.length >= SEARCH_LIMIT) {
+          state.search.truncated = true;
+          break;
+        }
+
+        var item = files[i];
+        var file;
+
+        try {
+          file = await item.handle.getFile();
+        } catch (e) {
+          continue;
+        }
+
+        if (file.size > SEARCH_FILE_MAX) continue;
+        if (totalBytes + file.size > SEARCH_MAX_BYTES) {
+          state.search.truncated = true;
+          break;
+        }
+        totalBytes += file.size;
+
+        var text;
+        try {
+          text = await file.text();
+        } catch (e) {
+          continue;
+        }
+
+        state.search.filesScanned++;
+
+        var folded = foldForSearch(text);
+        var nameFolded = foldForSearch(item.name).text;
+
+        if (nameFolded.indexOf(foldedQuery) !== -1) {
+          results.push({
+            kind: 'file',
+            name: item.name,
+            path: item.path,
+            handle: item.handle,
+            line: 0,
+            column: 0,
+            lineText: '',
+            matchStart: 0,
+            matchLength: 0,
+            term: query
+          });
+        }
+
+        var starts = buildLineStarts(text);
+        var seen = {};
+        var idx = folded.text.indexOf(foldedQuery);
+
+        while (idx !== -1 && results.length < SEARCH_LIMIT) {
+          var offset = folded.map[idx];
+          var lineIndex = lineIndexAt(starts, offset);
+
+          if (!seen[lineIndex]) {
+            seen[lineIndex] = true;
+
+            var lineStart = starts[lineIndex];
+            var lineEnd = lineIndex + 1 < starts.length ? starts[lineIndex + 1] - 1 : text.length;
+            var rawLine = text.slice(lineStart, lineEnd);
+            var leading = rawLine.length - rawLine.replace(/^\s+/, '').length;
+            var lineText = rawLine.trim();
+            var matchStart = offset - lineStart - leading;
+            var last = idx + foldedQuery.length - 1;
+            var matchLength = (last < folded.map.length ? folded.map[last] + 1 : text.length) - offset;
+
+            if (matchStart < 0) matchStart = 0;
+
+            if (lineText.length > 200) {
+              var from = Math.max(0, matchStart - 70);
+              lineText = lineText.slice(from, from + 220);
+              matchStart -= from;
+            }
+
+            results.push({
+              kind: 'content',
+              name: item.name,
+              path: item.path,
+              handle: item.handle,
+              line: lineIndex + 1,
+              column: offset - lineStart,
+              lineText: lineText,
+              matchStart: matchStart,
+              matchLength: Math.max(1, matchLength),
+              term: text.slice(offset, offset + Math.max(1, matchLength))
+            });
+          }
+
+          idx = folded.text.indexOf(foldedQuery, idx + Math.max(1, foldedQuery.length));
+        }
+
+        if (i % 10 === 0) {
+          state.search.results = results.slice();
+          renderSearchResults();
+        }
+      }
+    } finally {
+      if (seq === state.search.seq) {
+        state.search.busy = false;
+        state.search.results = results.slice();
+        renderSearchResults();
+      }
+    }
+  }
+
+  async function openSearchResult(index) {
+    var result = state.search.results[index];
+    if (!result) return;
+    if (!confirmDiscard()) return;
+
+    await loadHandle(result.handle, result.path);
+    if (!result.line) return;
+
+    var starts = buildLineStarts(editor.value);
+    var lineIndex = Math.min(result.line - 1, starts.length - 1);
+    var lineStart = starts[lineIndex] || 0;
+    var lineEnd = lineIndex + 1 < starts.length ? starts[lineIndex + 1] - 1 : editor.value.length;
+    var line = editor.value.slice(lineStart, lineEnd);
+    var target = line.toLowerCase().indexOf(String(result.term || '').toLowerCase());
+    var offset = target !== -1 ? lineStart + target : lineStart + result.column;
+
+    offset = Math.max(0, Math.min(offset, editor.value.length));
+    var length = result.matchLength || (result.term ? result.term.length : 0);
+
+    editor.focus();
+    editor.setSelectionRange(offset, Math.min(offset + length, editor.value.length));
+    centerCaret();
+  }
+
+  function globalFind() {
+    if (!state.prefs.sidebar) setPref('sidebar', true);
+    switchTab('search');
+    var input = $('#global-search-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+
 
   /* ------------------------------------------------------------------ *
    * divisão dos painéis
@@ -2734,6 +3207,7 @@
   }
 
   async function printDocument() {
+    renderNow();
     var images = $$('#preview img');
 
     if (images.length) {
@@ -2769,6 +3243,7 @@
   async function exportHtml() {
     toast('Preparando HTML autônomo…');
     try {
+      renderNow();
       await renderMermaidBlocks(state.renderSeq);
       var fragment = await prepareExportFragment();
       var html = buildExportHtml(fragment);
@@ -2782,12 +3257,38 @@
 
   async function copyHtml() {
     try {
+      renderNow();
       await renderMermaidBlocks(state.renderSeq);
       var fragment = await prepareExportFragment();
       await navigator.clipboard.writeText(fragment);
       toast('HTML do documento copiado.');
     } catch (e) {
       toast('Não foi possível copiar.');
+    }
+  }
+
+  async function exportOffice(kind) {
+    if (!window.IluminuraExport) {
+      toast('Exportação indisponível.');
+      return;
+    }
+
+    var label = kind === 'docx' ? 'DOCX' : 'EPUB';
+    toast('Preparando ' + label + '...');
+
+    try {
+      renderNow();
+      await renderMermaidBlocks(state.renderSeq);
+      var fragment = await prepareExportFragment();
+      var base = state.name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, '');
+      var blob = kind === 'docx'
+        ? await window.IluminuraExport.docx(fragment, { title: base })
+        : await window.IluminuraExport.epub(fragment, { title: base, headings: state.headings });
+
+      downloadBlob(blob, base + '.' + kind);
+      toast(label + ' exportado: ' + base + '.' + kind);
+    } catch (e) {
+      toast('Não foi possível exportar o ' + label + '.');
     }
   }
 
@@ -2803,6 +3304,34 @@
     $('#' + id).classList.remove('on');
   }
 
+  function installApp() {
+    if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
+      toast('O Iluminura já está instalado.');
+      return;
+    }
+
+    if (!deferredInstallPrompt) {
+      toast('Use o menu do navegador para instalar o aplicativo.');
+      return;
+    }
+
+    var prompt = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    prompt.prompt();
+
+    if (prompt.userChoice && typeof prompt.userChoice.then === 'function') {
+      prompt.userChoice.then(function (choice) {
+        if (choice && choice.outcome === 'accepted') toast('Instalando Iluminura.');
+      });
+    }
+  }
+
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+
   var SHORTCUTS = [
     ['Abrir arquivo', 'Ctrl+O'],
     ['Salvar', 'Ctrl+S'],
@@ -2811,6 +3340,7 @@
     ['Novo documento', 'Ctrl+N'],
     ['Localizar', 'Ctrl+F'],
     ['Substituir', 'Ctrl+H'],
+    ['Buscar na pasta', 'Ctrl+Shift+G'],
     ['Preferências', 'Ctrl+,'],
     ['Negrito', 'Ctrl+B'],
     ['Itálico', 'Ctrl+I'],
@@ -2933,6 +3463,12 @@
           e.preventDefault();
           if (k === 'y' || (k === 'z' && e.shiftKey)) redoEdit();
           else undoEdit();
+          return;
+        }
+
+        if (k === 'g' && e.shiftKey && !modalOpen) {
+          e.preventDefault();
+          globalFind();
           return;
         }
       }
@@ -3178,6 +3714,7 @@
     switchTab('outline');
     renderNow();
     paintSource();
+    registerServiceWorker();
   }
 
   if (document.readyState === 'loading') {

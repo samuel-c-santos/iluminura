@@ -7,6 +7,12 @@
 <meta name="description" content="Editor e leitor Markdown local, visual e offline, com diagramas Mermaid e impressão limpa.">
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6feb'/%3E%3Ccircle cx='16' cy='10.5' r='2.6' fill='%23f2c14e'/%3E%3Cpath d='M16 16v10' stroke='%23fff' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<meta name="theme-color" content="#2f6feb">
+<meta name="application-name" content="Iluminura">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Iluminura">
 </head>
 <body>
 
@@ -51,6 +57,7 @@
       <div class="sidebar-tabs">
         <button data-tab="outline" class="active">Esboço</button>
         <button data-tab="files">Arquivos</button>
+        <button data-tab="search">Buscar</button>
         <button type="button" class="sidebar-collapse" id="btn-sidebar-collapse" title="Recolher barra lateral (Ctrl+Shift+1)" aria-label="Recolher barra lateral">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 5 8l4 4"/><path d="M12.5 4 8.5 8l4 4"/></svg>
         </button>
@@ -246,10 +253,10 @@
       Visual, local e silencioso: o texto nunca sai do seu computador.
     </p>
     <p style="font-size:12.5px;line-height:1.7;color:var(--fg-dim);margin:0 0 10px">
-      Licença MIT. Motor Markdown, diagramas Mermaid sob demanda, realce de sintaxe, temas e interface gráfica implementados de forma autônoma.
+      Licença MIT. Motor Markdown, diagramas Mermaid sob demanda, busca global, exportação DOCX e EPUB e uso offline.
     </p>
     <p style="font-size:12px;color:var(--fg-faint);margin:0">
-      Versão <span id="app-version">1.4.0</span>
+      Versão <span id="app-version">1.5.0</span>
     </p>
     <div class="modal-actions">
       <button class="btn primary" data-close="modal-about">Fechar</button>
@@ -264,6 +271,7 @@
 
 <script src="assets/caminhos.js"></script>
 <script src="assets/markdown.js"></script>
+<script src="assets/exportar.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>
