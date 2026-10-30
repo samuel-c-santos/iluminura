@@ -1969,6 +1969,7 @@
     ['Código-fonte', 'Ctrl+/'],
     ['Modo foco', 'Ctrl+Shift+F'],
     ['Barra lateral', 'Ctrl+Shift+1'],
+    ['Barra de ferramentas', 'Ctrl+Shift+T'],
     ['Zoom', 'Ctrl+= / Ctrl+-'],
     ['Imprimir / PDF', 'Ctrl+P'],
     ['Atalhos', 'F1']
