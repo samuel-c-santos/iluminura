@@ -51,9 +51,16 @@
       <div class="sidebar-tabs">
         <button data-tab="outline" class="active">Esboço</button>
         <button data-tab="files">Arquivos</button>
+        <button type="button" class="sidebar-collapse" id="btn-sidebar-collapse" title="Recolher barra lateral (Ctrl+Shift+1)" aria-label="Recolher barra lateral">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 5 8l4 4"/><path d="M12.5 4 8.5 8l4 4"/></svg>
+        </button>
       </div>
       <div class="sidebar-body" id="sidebar-body"></div>
     </aside>
+
+    <button type="button" class="sidebar-restore" id="btn-sidebar-restore" title="Mostrar barra lateral (Ctrl+Shift+1)" aria-label="Mostrar barra lateral">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 4 4 4-4 4"/><path d="m3.5 4 4 4-4 4"/></svg>
+    </button>
 
     <div class="panes">
 
@@ -75,6 +82,11 @@
           <button id="find-close" title="Fechar (Esc)">✕</button>
         </div>
       </section>
+
+      <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+           aria-label="Redimensionar editor e visualização" aria-valuenow="50"
+           aria-valuemin="15" aria-valuemax="85" tabindex="0"
+           title="Arraste para redimensionar · duplo clique restaura 50%"></div>
 
       <section class="pane pane-preview" aria-label="Documento renderizado">
         <div class="doc-notice" id="doc-notice" hidden>

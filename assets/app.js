@@ -9,7 +9,7 @@
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
   var Caminhos = window.LeitorCaminhos;
 
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.3.0';
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
   var LS_RECENT = 'leitormd.recent.v1';
@@ -27,6 +27,7 @@
     hardBreak: false,
     mode: 'split',
     sidebar: true,
+    splitRatio: 0.5,
     toolbar: true,
     focus: false,
     typewriter: false,
@@ -108,6 +109,7 @@
     el.toolbar.classList.toggle('on', !!p.toolbar);
     $('#btn-toolbar').classList.toggle('on', !!p.toolbar);
     $('#btn-sidebar').classList.toggle('on', !!p.sidebar);
+    $('#btn-sidebar').setAttribute('aria-pressed', p.sidebar ? 'true' : 'false');
     $('#btn-focus').classList.toggle('on', !!p.focus);
     $('#btn-typewriter').classList.toggle('on', !!p.typewriter);
 
@@ -125,6 +127,7 @@
     $('#reading-speed').value = String(p.speed);
     $('#stat-zoom').textContent = p.zoom + '%';
 
+    applySplitRatio();
     syncToolbarState();
     paintSource();
   }
@@ -201,7 +204,133 @@
     editor.scrollTop = 0;
     previewScroll.scrollTop = 0;
     hideDiskNotice();
+    resetHistory();
     startDiskWatch();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * histórico de edição (desfazer / refazer)
+   * ------------------------------------------------------------------ */
+
+  var HISTORY_MAX_STEPS = 120;
+  var HISTORY_MAX_CHARS = 8 * 1024 * 1024;
+  var history = { stack: [], index: -1 };
+  var historyTimer = null;
+
+  function historySnapshot() {
+    return {
+      text: editor.value,
+      start: editor.selectionStart,
+      end: editor.selectionEnd,
+      scrollTop: editor.scrollTop,
+      previewTop: previewScroll.scrollTop
+    };
+  }
+
+  function resetHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    history.stack = [historySnapshot()];
+    history.index = 0;
+  }
+
+  function trimHistory() {
+    var total = 0;
+    history.stack.forEach(function (entry) { total += entry.text.length; });
+
+    while (history.stack.length > 2 && total > HISTORY_MAX_CHARS) {
+      total -= history.stack[0].text.length;
+      history.stack.shift();
+    }
+    while (history.stack.length > HISTORY_MAX_STEPS) history.stack.shift();
+
+    history.index = history.stack.length - 1;
+  }
+
+  function pushHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+
+    var snapshot = historySnapshot();
+    var top = history.stack[history.index];
+
+    if (top && top.text === snapshot.text) {
+      top.start = snapshot.start;
+      top.end = snapshot.end;
+      top.scrollTop = snapshot.scrollTop;
+      top.previewTop = snapshot.previewTop;
+      return;
+    }
+
+    if (history.index < history.stack.length - 1) {
+      history.stack.length = history.index + 1;
+    }
+
+    history.stack.push(snapshot);
+    trimHistory();
+  }
+
+  function flushHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+
+    var top = history.stack[history.index];
+    if (top && top.text === editor.value) {
+      top.start = editor.selectionStart;
+      top.end = editor.selectionEnd;
+      top.scrollTop = editor.scrollTop;
+      top.previewTop = previewScroll.scrollTop;
+      return;
+    }
+
+    pushHistory();
+  }
+
+  function scheduleHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = setTimeout(function () {
+      historyTimer = null;
+      pushHistory();
+    }, 600);
+  }
+
+  function applyHistoryEntry(entry) {
+    var max = entry.text.length;
+    editor.value = entry.text;
+    editor.setSelectionRange(Math.min(entry.start, max), Math.min(entry.end, max));
+    editor.scrollTop = entry.scrollTop;
+
+    state.text = entry.text;
+    markDirty(entry.text !== state.savedText);
+    renderNow();
+    paintSource();
+    syncHeadingSelect();
+    syncOverlayScroll();
+    previewScroll.scrollTop = entry.previewTop;
+
+    if (state.prefs.autosave) scheduleDraft();
+  }
+
+  function undoEdit() {
+    flushHistory();
+    if (history.index <= 0) {
+      editor.focus();
+      return;
+    }
+    history.index--;
+    applyHistoryEntry(history.stack[history.index]);
+    editor.focus();
+  }
+
+  function redoEdit() {
+    flushHistory();
+    if (history.index >= history.stack.length - 1) {
+      editor.focus();
+      return;
+    }
+    history.index++;
+    applyHistoryEntry(history.stack[history.index]);
+    editor.focus();
   }
 
   /* ------------------------------------------------------------------ *
@@ -332,6 +461,7 @@
 
       if (!path) return watchImage(img);
 
+      img.loading = 'eager';
       img.removeAttribute('src');
       img.classList.add('doc-img-loading');
 
@@ -1143,6 +1273,8 @@
    * ------------------------------------------------------------------ */
 
   function replaceRange(start, end, insertion, selStart, selEnd) {
+    flushHistory();
+
     var value = editor.value;
     editor.value = value.slice(0, start) + insertion + value.slice(end);
     editor.setSelectionRange(
@@ -1150,6 +1282,7 @@
       selEnd === undefined ? (selStart === undefined ? start + insertion.length : selEnd) : selEnd
     );
     onInput();
+    pushHistory();
   }
 
   function wrapSelection(before, after, placeholder) {
@@ -1273,12 +1406,12 @@
     saveAs: function () { saveDocument(true); },
     reloadDisk: function () { reloadFromDisk(false); },
     exportHtml: exportHtml,
-    exportPdf: function () { window.print(); },
+    exportPdf: function () { printDocument(); },
     copyHtml: copyHtml,
     closeDoc: function () { if (confirmDiscard()) newDocument(); },
 
-    undo: function () { document.execCommand('undo'); },
-    redo: function () { document.execCommand('redo'); },
+    undo: undoEdit,
+    redo: redoEdit,
     find: function () { openFind(); },
     replace: function () { openFind(true); },
     selectAll: function () { editor.focus(); editor.select(); },
@@ -1728,7 +1861,7 @@
 
   function switchTab(tab) {
     state.openTab = tab;
-    $$('.sidebar-tabs button').forEach(function (b) {
+    $$('.sidebar-tabs button[data-tab]').forEach(function (b) {
       b.classList.toggle('active', b.dataset.tab === tab);
     });
     if (tab === 'outline') buildOutline();
@@ -1741,7 +1874,7 @@
   }
 
   function wireSidebar() {
-    $$('.sidebar-tabs button').forEach(function (b) {
+    $$('.sidebar-tabs button[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { switchTab(b.dataset.tab); });
     });
 
@@ -1772,6 +1905,131 @@
         goToHeading(Number(btn.dataset.index));
       }
     });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * divisão dos painéis
+   * ------------------------------------------------------------------ */
+
+  function splitPanels() {
+    return { panes: $('.panes'), splitter: $('#splitter') };
+  }
+
+  function splitLimits() {
+    var parts = splitPanels();
+    var width = parts.panes ? parts.panes.clientWidth : 0;
+    var gap = parts.splitter ? parts.splitter.offsetWidth : 0;
+
+    if (width <= gap) return { min: 0.15, max: 0.85 };
+
+    /* cada lado preserva ao menos 280px, ou 35% em janelas estreitas */
+    var minPx = Math.min(280, (width - gap) * 0.35);
+    return {
+      min: minPx / width,
+      max: (width - gap - minPx) / width
+    };
+  }
+
+  function clampSplitRatio(ratio) {
+    var limits = splitLimits();
+    if (typeof ratio !== 'number' || !isFinite(ratio)) ratio = 0.5;
+    return Math.max(limits.min, Math.min(limits.max, ratio));
+  }
+
+  function applySplitRatio(ratio) {
+    var parts = splitPanels();
+    var limits = splitLimits();
+    var value = clampSplitRatio(typeof ratio === 'number'
+      ? ratio
+      : Number(state.prefs.splitRatio));
+
+    if (parts.panes) {
+      parts.panes.style.setProperty('--split-left', (value * 100).toFixed(2) + '%');
+    }
+
+    if (parts.splitter) {
+      parts.splitter.setAttribute('aria-valuenow', String(Math.round(value * 100)));
+      parts.splitter.setAttribute('aria-valuemin', String(Math.round(limits.min * 100)));
+      parts.splitter.setAttribute('aria-valuemax', String(Math.round(limits.max * 100)));
+    }
+
+    return value;
+  }
+
+  function saveSplitRatio(ratio) {
+    var value = applySplitRatio(ratio);
+    state.prefs.splitRatio = value;
+    savePrefs();
+    return value;
+  }
+
+  function ratioFromPointer(e) {
+    var parts = splitPanels();
+    if (!parts.panes || !parts.splitter) return null;
+
+    var width = parts.panes.clientWidth;
+    if (width <= 0) return null;
+
+    var rect = parts.panes.getBoundingClientRect();
+    return (e.clientX - rect.left) / width;
+  }
+
+  var splitDrag = null;
+  var splitResizeTimer = null;
+
+  function startSplitDrag(e) {
+    if (state.prefs.mode !== 'split') return;
+    if (e.button !== undefined && e.button !== 0) return;
+
+    var parts = splitPanels();
+    if (!parts.panes || !parts.splitter) return;
+
+    e.preventDefault();
+    splitDrag = { id: e.pointerId, ratio: applySplitRatio() };
+    parts.splitter.classList.add('dragging');
+    document.body.classList.add('col-resizing');
+    parts.splitter.focus();
+  }
+
+  function moveSplitDrag(e) {
+    if (!splitDrag || e.pointerId !== splitDrag.id) return;
+    var ratio = ratioFromPointer(e);
+    if (ratio === null) return;
+    splitDrag.ratio = applySplitRatio(ratio);
+  }
+
+  function endSplitDrag(e) {
+    if (!splitDrag) return;
+    if (e.pointerId !== undefined && e.pointerId !== splitDrag.id) return;
+
+    var value = splitDrag.ratio;
+    splitDrag = null;
+    document.body.classList.remove('col-resizing');
+
+    var splitter = $('#splitter');
+    if (splitter) splitter.classList.remove('dragging');
+
+    saveSplitRatio(value);
+  }
+
+  function onSplitterKeydown(e) {
+    var splitter = $('#splitter');
+    if (!splitter) return;
+
+    var current = Number(splitter.getAttribute('aria-valuenow')) / 100;
+    if (!isFinite(current)) current = 0.5;
+
+    var step = (e.shiftKey ? 5 : 2) / 100;
+    var next = null;
+
+    if (e.key === 'ArrowLeft') next = current - step;
+    else if (e.key === 'ArrowRight') next = current + step;
+    else if (e.key === 'Home') next = splitLimits().min;
+    else if (e.key === 'End') next = splitLimits().max;
+    else return;
+
+    e.preventDefault();
+    saveSplitRatio(next);
   }
 
   /* ------------------------------------------------------------------ *
@@ -1858,8 +2116,12 @@
     var replacement = $('#replace-input').value;
     var regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     var count = (editor.value.match(regex) || []).length;
-    editor.value = editor.value.replace(regex, replacement);
-    onInput();
+    if (!count) {
+      computeMatches();
+      toast('Nenhuma ocorrência para substituir.');
+      return;
+    }
+    replaceRange(0, editor.value.length, editor.value.replace(regex, replacement), 0, 0);
     computeMatches();
     toast(count + ' substituição(ões).');
   }
@@ -1970,6 +2232,7 @@
     paintSource();
     syncHeadingSelect();
     if (state.prefs.autosave) scheduleDraft();
+    scheduleHistory();
   }
 
   var draftTimer = null;
@@ -2268,6 +2531,51 @@
     return clone.innerHTML;
   }
 
+  /* ------------------------------------------------------------------ *
+   * impressão
+   * ------------------------------------------------------------------ */
+
+  function waitForImage(img) {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+
+    return new Promise(function (resolve) {
+      var timer = setTimeout(done, 2500);
+
+      function done() {
+        clearTimeout(timer);
+        img.removeEventListener('load', done);
+        img.removeEventListener('error', done);
+        resolve();
+      }
+
+      img.addEventListener('load', done);
+      img.addEventListener('error', done);
+    });
+  }
+
+  async function printDocument() {
+    var images = $$('#preview img');
+
+    if (images.length) {
+      var pending = images.some(function (img) {
+        return !img.complete || !img.naturalWidth;
+      });
+
+      if (pending) toast('Preparando imagens para impressão…');
+
+      images.forEach(function (img) { img.loading = 'eager'; });
+
+      await Promise.all(images.map(waitForImage));
+      await Promise.all(images.map(function (img) {
+        return typeof img.decode === 'function'
+          ? img.decode().catch(function () {})
+          : Promise.resolve();
+      }));
+    }
+
+    window.print();
+  }
+
   async function exportHtml() {
     toast('Preparando HTML autônomo…');
     try {
@@ -2306,6 +2614,8 @@
   var SHORTCUTS = [
     ['Abrir arquivo', 'Ctrl+O'],
     ['Salvar', 'Ctrl+S'],
+    ['Desfazer', 'Ctrl+Z'],
+    ['Refazer', 'Ctrl+Y / Ctrl+Shift+Z'],
     ['Novo documento', 'Ctrl+N'],
     ['Localizar', 'Ctrl+F'],
     ['Substituir', 'Ctrl+H'],
@@ -2317,6 +2627,7 @@
     ['Código-fonte', 'Ctrl+/'],
     ['Modo foco', 'Ctrl+Shift+F'],
     ['Barra lateral', 'Ctrl+Shift+1'],
+    ['Divisão dos painéis', 'Foco no divisor + ← / →'],
     ['Barra de ferramentas', 'Ctrl+Shift+T'],
     ['Atualizar do disco', 'F5'],
     ['Zoom', 'Ctrl+= / Ctrl+-'],
@@ -2413,6 +2724,27 @@
     });
 
     document.addEventListener('keydown', function (e) {
+      var mod = e.ctrlKey || e.metaKey;
+
+      if (mod && !e.altKey) {
+        var k = e.key.toLowerCase();
+        var target = e.target;
+        var editable = !!(target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable
+        ));
+        var modalOpen = !!$('.modal-backdrop.on');
+
+        if ((k === 'z' || k === 'y') && (!editable || target === editor) && !modalOpen) {
+          e.preventDefault();
+          if (k === 'y' || (k === 'z' && e.shiftKey)) redoEdit();
+          else undoEdit();
+          return;
+        }
+      }
+
       if (e.key === 'F5' && diskBound() && !$('.modal-backdrop.on') &&
           !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
@@ -2450,9 +2782,31 @@
 
     /* botões do cabeçalho */
     $('#btn-sidebar').addEventListener('click', COMMANDS.toggleSidebar);
+    $('#btn-sidebar-collapse').addEventListener('click', function () {
+      COMMANDS.toggleSidebar();
+      $('#btn-sidebar-restore').focus({ preventScroll: true });
+    });
+    $('#btn-sidebar-restore').addEventListener('click', function () {
+      COMMANDS.toggleSidebar();
+      $('#btn-sidebar-collapse').focus({ preventScroll: true });
+    });
     $('#btn-focus').addEventListener('click', COMMANDS.toggleFocus);
     $('#btn-typewriter').addEventListener('click', COMMANDS.toggleTypewriter);
     $('#btn-toolbar').addEventListener('click', COMMANDS.toggleToolbar);
+
+    /* divisor entre editor e visualização */
+    var splitter = $('#splitter');
+    splitter.addEventListener('pointerdown', startSplitDrag);
+    splitter.addEventListener('dblclick', function () { saveSplitRatio(0.5); });
+    splitter.addEventListener('keydown', onSplitterKeydown);
+    window.addEventListener('pointermove', moveSplitDrag);
+    window.addEventListener('pointerup', endSplitDrag);
+    window.addEventListener('pointercancel', endSplitDrag);
+    window.addEventListener('blur', endSplitDrag);
+    window.addEventListener('resize', function () {
+      clearTimeout(splitResizeTimer);
+      splitResizeTimer = setTimeout(function () { applySplitRatio(); }, 120);
+    });
 
     $('#btn-zoom-in').addEventListener('click', COMMANDS.zoomIn);
     $('#btn-zoom-out').addEventListener('click', COMMANDS.zoomOut);

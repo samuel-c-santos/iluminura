@@ -26,6 +26,8 @@ O sistema pode ser executado através de três métodos:
 
 ### 2.1 Interface e Modos de Operação
 - **Barra de Ferramentas em Faixas**: comandos organizados por contexto (Arquivo, Histórico, Texto, Parágrafo, Inserir e Exibir), no estilo de uma faixa de escritório, com ícones, dicas de atalho e estados ativos.
+- **Barra Lateral Recolhível**: o painel de Esboço e Arquivos pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
+- **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
 - **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica e barra de progresso) e modo Código-Fonte puro.
 - **Estruturação de Documento**: Extração e renderização dinâmica do índice hierárquico (TOC) com suporte a níveis de cabeçalho `H1` a `H6`.
 - **Métricas Textuais**: Contagem em tempo real de palavras, caracteres totais, caracteres sem espaço, linhas e parágrafos. Estimativa de tempo de leitura configurável (120, 240 ou 382 palavras por minuto).
@@ -38,6 +40,7 @@ O sistema pode ser executado através de três métodos:
 - **Automação de Entrada**: Fechamento automático de pares delimitadores (`()`, `[]`, `{}`, aspas simples e duplas, crases, `*`, `_`, `~`, `$`).
 - **Manipulação de Listas e Blocos**: Continuação automática de marcadores de lista, caixas de seleção de tarefas e blocos de citação ao inserir quebras de linha; encerramento de bloco mediante quebra dupla. Suporte a indentação e desindentação em bloco (`Tab` e `Shift+Tab`).
 - **Busca e Substituição**: Módulo integrado de busca textual com navegação sequencial e substituição individual ou global.
+- **Histórico de Edição**: desfazer e refazer (`Ctrl+Z`, `Ctrl+Y`, `Ctrl+Shift+Z`), disponível na faixa Histórico, no menu Editar e pelos botões, com agrupamento de digitação e cobertura de formatação e substituições.
 - **Persistência Temporária**: Salvamento periódico automático no armazenamento local do navegador para contenção de perda de dados.
 
 ### 2.3 Especificação de Renderização Markdown
@@ -67,7 +70,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 
 ### 2.6 Exportação
 - **HTML Autônomo**: Documento compilado contendo folhas de estilo e imagens embutidas (codificação Base64).
-- **PDF**: Folha de estilos otimizada para impressão via motor nativo do navegador (`@media print`).
+- **PDF**: Saída exclusivamente do documento renderizado, sem barras, editor ou painéis da interface. As imagens são carregadas e decodificadas antes da impressão, e há margens de página, controle de quebras e preservação de cores e blocos de código.
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
 
 ---
@@ -79,6 +82,8 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 | Novo documento | `Ctrl + N` |
 | Abrir arquivo | `Ctrl + O` |
 | Salvar documento | `Ctrl + S` |
+| Desfazer | `Ctrl + Z` |
+| Refazer | `Ctrl + Y` ou `Ctrl + Shift + Z` |
 | Localizar no texto | `Ctrl + F` |
 | Substituir no texto | `Ctrl + H` |
 | Aplicar negrito | `Ctrl + B` |
@@ -88,6 +93,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 | Alternar visualização de código-fonte | `Ctrl + /` |
 | Alternar modo foco | `Ctrl + Shift + F` |
 | Alternar painel lateral | `Ctrl + Shift + 1` |
+| Ajustar divisão dos painéis | `←` / `→` com o divisor focado |
 | Alternar barra de ferramentas | `Ctrl + Shift + T` |
 | Atualizar do disco | `F5` |
 | Inserir bloco de código | `Ctrl + Shift + K` |
