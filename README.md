@@ -25,6 +25,7 @@ O sistema pode ser executado através de três métodos:
 ## 2. Especificação Funcional
 
 ### 2.1 Interface e Modos de Operação
+- **Barra de Ferramentas em Faixas**: comandos organizados por contexto (Arquivo, Histórico, Texto, Parágrafo, Inserir e Exibir), no estilo de uma faixa de escritório, com ícones, dicas de atalho e estados ativos.
 - **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica e barra de progresso) e modo Código-Fonte puro.
 - **Estruturação de Documento**: Extração e renderização dinâmica do índice hierárquico (TOC) com suporte a níveis de cabeçalho `H1` a `H6`.
 - **Métricas Textuais**: Contagem em tempo real de palavras, caracteres totais, caracteres sem espaço, linhas e parágrafos. Estimativa de tempo de leitura configurável (120, 240 ou 382 palavras por minuto).
@@ -51,7 +52,13 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 - Notas de rodapé (`[^1]`), metadados YAML front matter (filtrados da visualização) e separadores temáticos (`<hr>`).
 - Segurança: sanitização estrita de HTML arbitrário e bloqueio preventivo de URIs executáveis (esquema `javascript:`).
 
-### 2.4 Exportação
+### 2.4 Imagens e Recursos Locais
+- **Caminhos Relativos**: imagens como `![figura](full_scan.png)` são resolvidas em relação ao arquivo Markdown, e não à página do aplicativo.
+- **Vínculo com a Pasta**: ao abrir a pasta do documento (ou usar o aviso “Abrir pasta do documento…”), o leitor localiza as imagens irmãs pela File System Access API e as exibe sem copiar arquivos.
+- **Diagnóstico Visual**: imagens ausentes recebem um espaço reservado com o nome do arquivo, e um aviso acionável indica quantas não foram carregadas.
+- **Exportação Autônoma**: imagens resolvidas são embutidas em Base64 no HTML exportado, produzindo um arquivo único e portátil.
+
+### 2.5 Exportação
 - **HTML Autônomo**: Documento compilado contendo folhas de estilo e imagens embutidas (codificação Base64).
 - **PDF**: Folha de estilos otimizada para impressão via motor nativo do navegador (`@media print`).
 - **Transferência**: Cópia direta da marcação HTML processada para a área de transferência do sistema.
@@ -74,6 +81,7 @@ O analisador sintático integrado implementa o subconjunto comum das especifica�
 | Alternar visualização de código-fonte | `Ctrl + /` |
 | Alternar modo foco | `Ctrl + Shift + F` |
 | Alternar painel lateral | `Ctrl + Shift + 1` |
+| Alternar barra de ferramentas | `Ctrl + Shift + T` |
 | Inserir bloco de código | `Ctrl + Shift + K` |
 | Inserir bloco matemático | `Ctrl + Shift + M` |
 | Imprimir / Exportar PDF | `Ctrl + P` |
@@ -88,6 +96,7 @@ leitor_md/
 ├── index.html              Interface gráfica do usuário e estrutura dos painéis
 ├── assets/
 │   ├── markdown.js         Analisador sintático, gerador de AST e motor de realce
+│   ├── caminhos.js         Resolução segura de caminhos relativos de imagens
 │   ├── app.js              Controlador de estado, manipulação de arquivos e eventos
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
 │   └── logo.svg            Identificador visual vetorial
@@ -95,7 +104,8 @@ leitor_md/
 ├── iniciar.bat             Script de inicialização rápida para ambiente Windows
 ├── exemplo.md              Documento de validação de sintaxe e referência
 ├── testes/
-│   └── markdown.test.js    Suíte de testes automatizados do analisador
+│   ├── markdown.test.js    Suíte de testes automatizados do analisador
+│   └── caminhos.test.js    Testes de resolução de caminhos relativos
 └── LICENSE                 Termos da licença MIT
 ```
 
@@ -107,9 +117,10 @@ A integridade do motor de análise léxica e sintática é validada por meio de 
 
 ```bash
 node testes/markdown.test.js
+node testes/caminhos.test.js
 ```
 
-A rotina avalia 30 asserções cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, sanitização contra injeção de script e isolamento de links maliciosos.
+A rotina avalia 30 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, sanitização contra injeção de script e isolamento de links maliciosos, além de 15 asserções de resolução de caminhos relativos, incluindo subpastas, `..`, codificação percentual e bloqueio de escape da raiz.
 
 ---
 
@@ -117,7 +128,7 @@ A rotina avalia 30 asserções cobrindo processamento de blocos, regras de inlin
 
 - **Modelo de Visualização**: A interface utiliza arquitetura de painel duplo (editor de texto e painel de renderização) ou visualização alternada, não empregando edição direta *in-place* no documento renderizado.
 - **Diagramas Vetoriais**: Sintaxes baseadas em bibliotecas externas (como Mermaid ou PlantUML) não são processadas graficamente, permanecendo como blocos de código formatados.
-- **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais depende da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium).
+- **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais e a resolução de imagens relativas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
 - **Desempenho de Realce**: Documentos que excedem o limiar de 2.500 linhas têm a camada de realce do editor temporariamente desativada durante a digitação para preservar a taxa de quadros e a responsividade da entrada.
 
 ---

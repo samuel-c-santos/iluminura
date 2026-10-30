@@ -32,30 +32,7 @@
   </header>
 
   <!-- --------------------------------------------------------- toolbar -->
-  <div class="toolbar" id="toolbar">
-    <button data-cmd="h1" title="Título 1 (Ctrl+1)">H1</button>
-    <button data-cmd="h2" title="Título 2 (Ctrl+2)">H2</button>
-    <button data-cmd="h3" title="Título 3 (Ctrl+3)">H3</button>
-    <span class="sep"></span>
-    <button data-cmd="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
-    <button data-cmd="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
-    <button data-cmd="strike" title="Riscado (Alt+Shift+5)"><s>S</s></button>
-    <button data-cmd="highlight" title="Realçado">▮</button>
-    <button data-cmd="code" title="Código (Ctrl+Shift+`)">&lt;/&gt;</button>
-    <button data-cmd="math" title="Fórmula (Ctrl+Shift+M)">∑</button>
-    <span class="sep"></span>
-    <button data-cmd="quote" title="Citação (Ctrl+Shift+Q)">❝</button>
-    <button data-cmd="ul" title="Lista (Ctrl+Shift+U)">•</button>
-    <button data-cmd="ol" title="Lista ordenada (Ctrl+Shift+O)">1.</button>
-    <button data-cmd="task" title="Lista de tarefas (Ctrl+Shift+X)">☑</button>
-    <span class="sep"></span>
-    <button data-cmd="link" title="Link (Ctrl+K)">🔗</button>
-    <button data-cmd="image" title="Imagem (Ctrl+Shift+I)">🖼</button>
-    <button data-cmd="table" title="Tabela (Ctrl+T)">▦</button>
-    <button data-cmd="hr" title="Linha horizontal">—</button>
-    <span class="sep"></span>
-    <button data-cmd="find" title="Localizar (Ctrl+F)">🔍</button>
-  </div>
+  <div class="toolbar" id="toolbar" role="toolbar" aria-label="Barra de ferramentas"></div>
 
   <!-- -------------------------------------------------------- workspace -->
   <div class="workspace">
@@ -90,6 +67,14 @@
       </section>
 
       <section class="pane pane-preview" aria-label="Documento renderizado">
+        <div class="doc-notice" id="doc-notice" hidden>
+          <span class="doc-notice-icon" aria-hidden="true">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"/><path d="m3 11 3.1-3.1 2.4 2.4 1.7-1.7L13 11.3"/><circle cx="10.4" cy="5.8" r="1.1"/></svg>
+          </span>
+          <span id="doc-notice-text"></span>
+          <button type="button" class="doc-notice-action" id="doc-notice-action">Abrir pasta do documento…</button>
+          <button type="button" class="doc-notice-close" id="doc-notice-close" title="Fechar aviso" aria-label="Fechar aviso">✕</button>
+        </div>
         <div class="preview-scroll" id="preview-scroll">
           <article class="document" id="preview"></article>
         </div>
@@ -248,6 +233,7 @@
 
 <input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" hidden>
 
+<script src="assets/caminhos.js"></script>
 <script src="assets/markdown.js"></script>
 <script src="assets/app.js"></script>
 </body>

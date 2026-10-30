@@ -7,8 +7,9 @@
 
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
   var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+  var Caminhos = window.LeitorCaminhos;
 
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.1.0';
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
   var LS_RECENT = 'leitormd.recent.v1';
@@ -25,7 +26,7 @@
     hardBreak: false,
     mode: 'split',
     sidebar: true,
-    toolbar: false,
+    toolbar: true,
     focus: false,
     typewriter: false,
     zoom: 100,
@@ -46,6 +47,11 @@
     handle: null,
     dirHandle: null,
     fileTree: null,
+    docPath: null,
+    renderSeq: 0,
+    noticeDismissed: false,
+    imageCache: new Map(),
+    imagePending: new Map(),
     dirty: false,
     headings: [],
     lastRender: 0,
@@ -109,6 +115,7 @@
     $('#reading-speed').value = String(p.speed);
     $('#stat-zoom').textContent = p.zoom + '%';
 
+    syncToolbarState();
     paintSource();
   }
 
@@ -123,11 +130,13 @@
    * ------------------------------------------------------------------ */
 
   function renderNow() {
+    var seq = ++state.renderSeq;
     var result = LeitorMD.render(state.text, { hardBreak: state.prefs.hardBreak });
     preview.innerHTML = result.html;
     state.headings = result.headings;
     updateStats();
     buildOutline();
+    resolveDocImages(seq);
   }
 
   var renderTimer = null;
@@ -160,10 +169,12 @@
     }
   }
 
-  function setDoc(text, name, handle) {
+  function setDoc(text, name, handle, docPath) {
     state.text = text;
     state.savedText = text;
     state.handle = handle || null;
+    state.docPath = docPath || null;
+    state.noticeDismissed = false;
     if (name) state.name = name;
     editor.value = text;
     editor.setSelectionRange(0, 0);
@@ -171,8 +182,217 @@
     document.title = state.name + ' — leitor_md';
     renderNow();
     paintSource();
+    syncHeadingSelect();
     editor.scrollTop = 0;
     previewScroll.scrollTop = 0;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * imagens relativas e pasta do documento
+   * ------------------------------------------------------------------ */
+
+  function getFileFromRoot(root, relPath) {
+    var parts = String(relPath || '').split('/').filter(Boolean);
+    var name = parts.pop();
+    if (!root || !name) return Promise.reject(new Error('Caminho inválido'));
+
+    var dir = root;
+    var chain = Promise.resolve(dir);
+    parts.forEach(function (part) {
+      chain = chain.then(function (d) { return d.getDirectoryHandle(part); });
+    });
+    return chain
+      .then(function (d) { return d.getFileHandle(name); })
+      .then(function (h) { return h.getFile(); });
+  }
+
+  function loadImageUrl(relPath) {
+    if (state.imageCache.has(relPath)) return Promise.resolve(state.imageCache.get(relPath));
+    if (state.imagePending.has(relPath)) return state.imagePending.get(relPath);
+
+    var root = state.dirHandle;
+    var pending = getFileFromRoot(root, relPath).then(function (file) {
+      if (root !== state.dirHandle) throw new Error('A pasta mudou durante a leitura');
+      var url = URL.createObjectURL(file);
+      state.imageCache.set(relPath, url);
+      return url;
+    });
+    pending.then(function () {
+      state.imagePending.delete(relPath);
+    }, function () {
+      state.imagePending.delete(relPath);
+    });
+    state.imagePending.set(relPath, pending);
+    return pending;
+  }
+
+  function clearImageCache() {
+    state.imageCache.forEach(function (url) {
+      try { URL.revokeObjectURL(url); } catch (e) { /* já revogada */ }
+    });
+    state.imageCache.clear();
+    state.imagePending.clear();
+  }
+
+  function missingImageDataUri(label) {
+    var cs = getComputedStyle(document.documentElement);
+    var bg = cs.getPropertyValue('--bg-soft').trim() || '#f6f7f9';
+    var border = cs.getPropertyValue('--border-strong').trim() || '#d0d5db';
+    var fg = cs.getPropertyValue('--fg-dim').trim() || '#6b7280';
+    var faint = cs.getPropertyValue('--fg-faint').trim() || '#9ca3af';
+    var text = String(label || '').replace(/[<>&"]/g, function (c) {
+      return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+    });
+    if (text.length > 64) text = text.slice(0, 61) + '…';
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="150" viewBox="0 0 640 150">' +
+      '<rect x="1" y="1" width="638" height="148" rx="10" fill="' + bg + '" stroke="' + border + '" stroke-dasharray="8 6"/>' +
+      '<text x="320" y="72" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="' + fg + '">Imagem não encontrada</text>' +
+      '<text x="320" y="98" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="' + faint + '">' + text + '</text>' +
+      '</svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function markImageMissing(img) {
+    if (img.dataset.imgState === 'missing') return;
+    img.dataset.imgState = 'missing';
+    if (img.dataset.origAlt === undefined) img.dataset.origAlt = img.alt || '';
+    img.alt = img.dataset.origAlt
+      ? img.dataset.origAlt + ' — imagem não encontrada'
+      : 'Imagem não encontrada';
+    img.classList.remove('doc-img-loading');
+    img.classList.add('doc-img-missing');
+    img.src = missingImageDataUri(img.dataset.origSrc || '');
+    updateImageNotice();
+  }
+
+  function watchImage(img) {
+    if (img.complete) {
+      if (img.naturalWidth > 0) {
+        img.dataset.imgState = 'ok';
+      } else {
+        markImageMissing(img);
+      }
+      return Promise.resolve();
+    }
+
+    return new Promise(function (resolve) {
+      function done(ok) {
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onError);
+        if (ok) img.dataset.imgState = 'ok';
+        else markImageMissing(img);
+        resolve();
+      }
+      function onLoad() { done(true); }
+      function onError() { done(false); }
+      img.addEventListener('load', onLoad);
+      img.addEventListener('error', onError);
+    });
+  }
+
+  function resolveDocImages(seq) {
+    var imgs = $$('#preview img');
+    var relatives = [];
+
+    imgs.forEach(function (img) {
+      var src = img.getAttribute('src') || '';
+      if (!Caminhos || !Caminhos.isRelative(src)) return;
+      img.dataset.origSrc = src;
+      relatives.push(img);
+    });
+
+    if (!relatives.length) {
+      updateImageNotice();
+      return;
+    }
+
+    var tasks = relatives.map(function (img) {
+      var path = (state.dirHandle && state.docPath)
+        ? Caminhos.resolve(state.docPath, img.dataset.origSrc)
+        : null;
+
+      if (!path) return watchImage(img);
+
+      img.removeAttribute('src');
+      img.classList.add('doc-img-loading');
+
+      return loadImageUrl(path).then(function (url) {
+        if (seq !== state.renderSeq || !img.isConnected) return;
+        img.src = url;
+        img.dataset.imgState = 'ok';
+        img.dataset.docPath = path;
+        img.classList.remove('doc-img-loading');
+      }, function () {
+        if (seq !== state.renderSeq || !img.isConnected) return;
+        img.classList.remove('doc-img-loading');
+        // fallback: deixa o navegador tentar o caminho relativo original
+        img.src = img.dataset.origSrc;
+        return watchImage(img);
+      });
+    });
+
+    Promise.all(tasks).then(function () {
+      if (seq === state.renderSeq) updateImageNotice();
+    });
+    updateImageNotice();
+  }
+
+  function updateImageNotice() {
+    var notice = $('#doc-notice');
+    if (!notice) return;
+
+    var missing = $$('#preview img[data-img-state="missing"]').length;
+    if (!missing || state.noticeDismissed) {
+      notice.hidden = true;
+      return;
+    }
+
+    var msg = missing === 1
+      ? '1 imagem relativa não foi carregada.'
+      : missing + ' imagens relativas não foram carregadas.';
+    msg += state.dirHandle
+      ? ' Confira se os arquivos estão na pasta aberta.'
+      : ' Abra a pasta do documento para carregá-las.';
+    $('#doc-notice-text').textContent = msg;
+
+    var action = $('#doc-notice-action');
+    if (action) action.textContent = state.dirHandle ? 'Abrir outra pasta…' : 'Abrir pasta do documento…';
+    notice.hidden = false;
+  }
+
+  function hasRelativeImages() {
+    return $$('#preview img').some(function (img) {
+      var src = img.dataset.origSrc || img.getAttribute('src') || '';
+      return Caminhos && Caminhos.isRelative(src);
+    });
+  }
+
+  async function findFileByName(root, name, basePath, depth, budget) {
+    depth = depth || 0;
+    budget = budget || { visited: 0 };
+    if (depth > 6 || budget.visited > 3000) return null;
+
+    var dirs = [];
+    try {
+      for await (var entry of root.values()) {
+        if (++budget.visited > 3000) break;
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+        var path = basePath ? basePath + '/' + entry.name : entry.name;
+        if (entry.kind === 'file' && entry.name.toLowerCase() === String(name).toLowerCase()) {
+          return { handle: entry, path: path };
+        }
+        if (entry.kind === 'directory') dirs.push({ handle: entry, path: path });
+      }
+    } catch (e) {
+      return null;
+    }
+
+    for (var i = 0; i < dirs.length; i++) {
+      var found = await findFileByName(dirs[i].handle, name, dirs[i].path, depth + 1, budget);
+      if (found) return found;
+    }
+    return null;
   }
 
   /* ------------------------------------------------------------------ *
@@ -380,11 +600,11 @@
     $('#file-input').click();
   }
 
-  async function loadHandle(handle) {
+  async function loadHandle(handle, docPath) {
     try {
       var file = await handle.getFile();
       var text = await file.text();
-      setDoc(text, file.name, handle);
+      setDoc(text, file.name, handle, docPath || null);
       addRecent(file.name, text);
       toast('Aberto: ' + file.name);
     } catch (err) {
@@ -450,30 +670,60 @@
 
   /* --------------------------------------------------- pastas / árvore -- */
 
-  async function openFolder() {
+  async function openFolder(bindCurrent) {
     if (typeof window.showDirectoryPicker !== 'function') {
       toast('Seu navegador não permite abrir pastas. Use o servidor local ou o Chrome/Edge.');
       return;
     }
     try {
-      state.dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-      state.fileTree = await readDirectory(state.dirHandle, 0);
+      var previousRoot = state.dirHandle;
+      var root = await window.showDirectoryPicker({ mode: 'read' });
+      var rootChanged = root !== previousRoot;
+
+      if (rootChanged) {
+        state.docPath = null;
+        state.noticeDismissed = false;
+      }
+
+      state.dirHandle = root;
+      state.fileTree = await readDirectory(root, 0, '');
       switchTab('files');
-      toast('Pasta aberta: ' + state.dirHandle.name);
+
+      var bind = !!bindCurrent || (!state.docPath && hasRelativeImages());
+      var bound = false;
+      if (bind && state.name) {
+        var found = await findFileByName(root, state.name, '');
+        if (found) {
+          state.docPath = found.path;
+          state.noticeDismissed = false;
+          bound = true;
+          toast('Pasta aberta: ' + root.name + ' — imagens vinculadas a ' + found.path);
+        } else {
+          toast('Pasta aberta: ' + root.name + ' — documento "' + state.name + '" não encontrado nela.');
+        }
+      }
+
+      if (rootChanged || bound) {
+        clearImageCache();
+        renderNow();
+      }
+
+      if (!bound && !bind) toast('Pasta aberta: ' + root.name);
     } catch (err) {
       if (err && err.name !== 'AbortError') toast('Não foi possível abrir a pasta.');
     }
   }
 
-  async function readDirectory(dir, depth) {
+  async function readDirectory(dir, depth, basePath) {
     var items = [];
     try {
       for await (var entry of dir.values()) {
         if (entry.name.startsWith('.')) continue;
+        var path = basePath ? basePath + '/' + entry.name : entry.name;
         if (entry.kind === 'directory') {
-          items.push({ kind: 'dir', name: entry.name, handle: entry, depth: depth, open: false, children: null });
+          items.push({ kind: 'dir', name: entry.name, handle: entry, path: path, depth: depth, open: false, children: null });
         } else if (/\.(md|markdown|mdown|mkd|txt)$/i.test(entry.name)) {
-          items.push({ kind: 'file', name: entry.name, handle: entry, depth: depth });
+          items.push({ kind: 'file', name: entry.name, handle: entry, path: path, depth: depth });
         }
       }
     } catch (e) {}
@@ -607,7 +857,9 @@
 
     var m = /^(#{1,6})\s+/.exec(line);
     var newLine;
-    if (m && m[1].length === level) {
+    if (!level) {
+      newLine = line.replace(/^#{1,6}\s+/, '');
+    } else if (m && m[1].length === level) {
       newLine = line.replace(/^#{1,6}\s+/, '');
     } else if (m) {
       newLine = line.replace(/^#{1,6}\s+/, '#'.repeat(level) + ' ');
@@ -646,10 +898,37 @@
     wrapSelection(marker, marker, placeholder);
   }
 
+  function clearFormat() {
+    var start = editor.selectionStart;
+    var end = editor.selectionEnd;
+    var value = editor.value;
+
+    if (start === end) {
+      var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      var lineEnd = value.indexOf('\n', start);
+      if (lineEnd === -1) lineEnd = value.length;
+      start = lineStart;
+      end = lineEnd;
+    }
+
+    var block = value.slice(start, end)
+      .replace(/^(\s*)#{1,6}\s+/gm, '$1')
+      .replace(/^(\s*)>\s?/gm, '$1')
+      .replace(/^(\s*)(?:[-*+]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?/gm, '$1')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/\*\*\*|\*\*|\*|___|__|~~|==|\$/g, '');
+
+    replaceRange(start, end, block, start, start + block.length);
+    editor.focus();
+  }
+
   var COMMANDS = {
     new: newDocument,
     open: openFile,
-    openFolder: openFolder,
+    openFolder: function () { openFolder(false); },
+    openFolderImages: function () { openFolder(true); },
     save: function () { saveDocument(false); },
     saveAs: function () { saveDocument(true); },
     exportHtml: exportHtml,
@@ -669,23 +948,17 @@
     h4: function () { toggleHeading(4); },
     h5: function () { toggleHeading(5); },
     h6: function () { toggleHeading(6); },
-    h0: function () {
-      var start = editor.selectionStart;
-      var value = editor.value;
-      var lineStart = value.lastIndexOf('\n', start - 1) + 1;
-      var lineEnd = value.indexOf('\n', start);
-      if (lineEnd === -1) lineEnd = value.length;
-      var line = value.slice(lineStart, lineEnd).replace(/^#{1,6}\s+/, '');
-      replaceRange(lineStart, lineEnd, line, lineStart, lineStart + line.length);
-      editor.focus();
-    },
+    h0: function () { toggleHeading(0); },
     bold: function () { toggleWrap('**', 'texto'); },
     italic: function () { toggleWrap('*', 'texto'); },
     strike: function () { toggleWrap('~~', 'texto'); },
     highlight: function () { toggleWrap('==', 'texto'); },
     code: function () { toggleWrap('`', 'código'); },
+    sub: function () { toggleWrap('~', 'texto'); },
+    sup: function () { toggleWrap('^', 'texto'); },
     math: function () { insertBlock('$$\n\n$$', 2); },
     inlineMath: function () { toggleWrap('$', 'x^2'); },
+    clearFormat: function () { clearFormat(); },
     link: function () {
       var start = editor.selectionStart;
       var end = editor.selectionEnd;
@@ -729,6 +1002,199 @@
     about: function () { openModal('modal-about'); }
   };
 
+  /* --------------------------------------------------------- toolbar -- */
+
+  var TOOL_ICONS = {
+    new: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v5h4"/></svg>',
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2h9v10h-17z"/></svg>',
+    openFolder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2h9v10h-17z"/><path d="M12 13v4M10 15h4"/></svg>',
+    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.5h11l3 3v14H5z"/><path d="M8.5 3.5v6h7v-6M8.5 20.5v-6h7v6"/></svg>',
+    print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8.5v-5h10v5M5 8.5h14v8h-3M8 20.5h8v-7H8z"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4.5 11.5 9 16"/><path d="M4.5 11.5H14a5.5 5.5 0 0 1 0 11h-2"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 7 4.5 4.5L15 16"/><path d="M19.5 11.5H10a5.5 5.5 0 0 0 0 11h2"/></svg>',
+    find: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>',
+    replace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13M13 3l4 4-4 4"/><path d="M20 17H7M11 21l-4-4 4-4"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m9.5 14.5 5-5"/><path d="M8 16.5 6 18.5a4.2 4.2 0 0 1-6-6l2-2"/><path d="m16 7.5 2-2a4.2 4.2 0 0 1 6 6l-2 2"/></svg>',
+    image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m4.5 17 5-5 4 4 2-2 4 4"/></svg>',
+    table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9.5 4.5v15M15 4.5v15"/></svg>',
+    clear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 7-7 5 5-7 7H7z"/><path d="M4 20h16"/></svg>',
+    split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>',
+    read: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h7a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H3z"/><path d="M21 5.5h-7a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h7z"/></svg>',
+    source: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></svg>',
+    sidebar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>',
+    focus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>',
+    typewriter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 5h19M2.5 19h19"/><rect x="10.5" y="9" width="3" height="6" rx="1.2" fill="currentColor" stroke="none"/></svg>',
+    fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    bold: '<span class="tb-glyph tb-strong">B</span>',
+    italic: '<span class="tb-glyph tb-italic">I</span>',
+    strike: '<span class="tb-glyph tb-strike">S</span>',
+    highlight: '<span class="tb-glyph tb-highlight">A</span>',
+    code: '<span class="tb-glyph tb-code">&lt;/&gt;</span>',
+    sub: '<span class="tb-glyph">X<sub>2</sub></span>',
+    sup: '<span class="tb-glyph">X<sup>2</sup></span>',
+    quote: '<span class="tb-glyph tb-quote">❝</span>',
+    ul: '<span class="tb-glyph tb-list-bullet">•</span>',
+    ol: '<span class="tb-glyph tb-list-number">1.</span>',
+    task: '<span class="tb-glyph tb-task">☑</span>',
+    math: '<span class="tb-glyph tb-math">∑</span>',
+    hr: '<span class="tb-glyph tb-hr">—</span>'
+  };
+
+  var TOOLBAR_GROUPS = [
+    {
+      label: 'Arquivo',
+      items: [
+        { cmd: 'new', icon: 'new', title: 'Novo documento (Ctrl+N)' },
+        { cmd: 'open', icon: 'open', title: 'Abrir arquivo (Ctrl+O)' },
+        { cmd: 'openFolder', icon: 'openFolder', title: 'Abrir pasta' },
+        { cmd: 'save', icon: 'save', title: 'Salvar (Ctrl+S)' },
+        { cmd: 'exportPdf', icon: 'print', title: 'Imprimir / PDF (Ctrl+P)' }
+      ]
+    },
+    {
+      label: 'Histórico',
+      items: [
+        { cmd: 'undo', icon: 'undo', title: 'Desfazer (Ctrl+Z)' },
+        { cmd: 'redo', icon: 'redo', title: 'Refazer (Ctrl+Y)' },
+        { cmd: 'find', icon: 'find', title: 'Localizar (Ctrl+F)' },
+        { cmd: 'replace', icon: 'replace', title: 'Localizar e substituir (Ctrl+H)' }
+      ]
+    },
+    {
+      label: 'Texto',
+      items: [
+        { type: 'heading' },
+        { cmd: 'bold', icon: 'bold', title: 'Negrito (Ctrl+B)' },
+        { cmd: 'italic', icon: 'italic', title: 'Itálico (Ctrl+I)' },
+        { cmd: 'strike', icon: 'strike', title: 'Riscado (Alt+Shift+5)' },
+        { cmd: 'highlight', icon: 'highlight', title: 'Realçado' },
+        { cmd: 'code', icon: 'code', title: 'Código em linha (Ctrl+Shift+E)' },
+        { cmd: 'sub', icon: 'sub', title: 'Subscrito' },
+        { cmd: 'sup', icon: 'sup', title: 'Sobrescrito' },
+        { cmd: 'clearFormat', icon: 'clear', title: 'Limpar formatação' }
+      ]
+    },
+    {
+      label: 'Parágrafo',
+      items: [
+        { cmd: 'quote', icon: 'quote', title: 'Citação (Ctrl+Shift+Q)' },
+        { cmd: 'ul', icon: 'ul', title: 'Lista com marcadores (Ctrl+Shift+U)' },
+        { cmd: 'ol', icon: 'ol', title: 'Lista numerada (Ctrl+Shift+O)' },
+        { cmd: 'task', icon: 'task', title: 'Lista de tarefas (Ctrl+Shift+X)' }
+      ]
+    },
+    {
+      label: 'Inserir',
+      items: [
+        { cmd: 'link', icon: 'link', title: 'Link (Ctrl+K)' },
+        { cmd: 'image', icon: 'image', title: 'Imagem (Ctrl+Shift+I)' },
+        { cmd: 'table', icon: 'table', title: 'Tabela (Ctrl+T)' },
+        { cmd: 'codeblock', icon: 'source', title: 'Bloco de código (Ctrl+Shift+K)' },
+        { cmd: 'math', icon: 'math', title: 'Bloco de fórmula (Ctrl+Shift+M)' },
+        { cmd: 'inlineMath', icon: 'math', title: 'Fórmula em linha' },
+        { cmd: 'hr', icon: 'hr', title: 'Linha horizontal' }
+      ]
+    },
+    {
+      label: 'Exibir',
+      items: [
+        { cmd: 'modeSplit', icon: 'split', title: 'Modo dividido (Ctrl+Alt+1)' },
+        { cmd: 'modeRead', icon: 'read', title: 'Somente leitura (Ctrl+Alt+2)' },
+        { cmd: 'modeSource', icon: 'source', title: 'Código-fonte (Ctrl+/)' },
+        { cmd: 'toggleSidebar', icon: 'sidebar', title: 'Barra lateral (Ctrl+Shift+1)' },
+        { cmd: 'toggleFocus', icon: 'focus', title: 'Modo foco (Ctrl+Shift+F)' },
+        { cmd: 'toggleTypewriter', icon: 'typewriter', title: 'Modo máquina de escrever' },
+        { cmd: 'fullscreen', icon: 'fullscreen', title: 'Tela cheia (F11)' }
+      ]
+    }
+  ];
+
+  function buildToolbar() {
+    var bar = el.toolbar;
+    if (!bar) return;
+
+    bar.innerHTML = '';
+
+    TOOLBAR_GROUPS.forEach(function (group) {
+      var wrap = document.createElement('div');
+      wrap.className = 'tool-group';
+
+      var row = document.createElement('div');
+      row.className = 'tool-row';
+
+      group.items.forEach(function (item) {
+        if (item.type === 'heading') {
+          var select = document.createElement('select');
+          select.id = 'tb-heading';
+          select.className = 'tb-heading';
+          select.title = 'Estilo do parágrafo';
+          select.setAttribute('aria-label', 'Estilo do parágrafo');
+
+          [['0', 'Parágrafo'], ['1', 'Título 1'], ['2', 'Título 2'], ['3', 'Título 3'],
+           ['4', 'Título 4'], ['5', 'Título 5'], ['6', 'Título 6']].forEach(function (opt) {
+            var o = document.createElement('option');
+            o.value = opt[0];
+            o.textContent = opt[1];
+            select.appendChild(o);
+          });
+
+          row.appendChild(select);
+          el.headingSelect = select;
+          return;
+        }
+
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.cmd = item.cmd;
+        button.title = item.title;
+        button.setAttribute('aria-label', item.title.replace(/\s*\(.*$/, ''));
+        button.innerHTML = TOOL_ICONS[item.icon] || item.cmd;
+        row.appendChild(button);
+      });
+
+      var label = document.createElement('span');
+      label.className = 'tool-label';
+      label.textContent = group.label;
+
+      wrap.appendChild(row);
+      wrap.appendChild(label);
+      bar.appendChild(wrap);
+    });
+  }
+
+  function syncToolbarState() {
+    if (!el.toolbar) return;
+    var p = state.prefs;
+    var active = {
+      modeSplit: p.mode === 'split',
+      modeRead: p.mode === 'read',
+      modeSource: p.mode === 'source',
+      toggleSidebar: p.sidebar,
+      toggleFocus: p.focus,
+      toggleTypewriter: p.typewriter,
+      fullscreen: !!document.fullscreenElement
+    };
+
+    $$('button[data-cmd]', el.toolbar).forEach(function (button) {
+      var on = !!active[button.dataset.cmd];
+      button.classList.toggle('on', on);
+      if (Object.prototype.hasOwnProperty.call(active, button.dataset.cmd)) {
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+    });
+  }
+
+  function syncHeadingSelect() {
+    if (!el.headingSelect || !editor) return;
+    var start = editor.selectionStart || 0;
+    var value = editor.value || '';
+    var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    var lineEnd = value.indexOf('\n', start);
+    if (lineEnd === -1) lineEnd = value.length;
+    var m = /^(#{1,6})\s+/.exec(value.slice(lineStart, lineEnd));
+    el.headingSelect.value = m ? String(m[1].length) : '0';
+  }
+
   /* ------------------------------------------------------------ menus -- */
 
   function menuDefinition() {
@@ -740,6 +1206,7 @@
           { label: 'Novo', key: 'Ctrl+N', cmd: 'new' },
           { label: 'Abrir…', key: 'Ctrl+O', cmd: 'open' },
           { label: 'Abrir pasta…', cmd: 'openFolder' },
+          { label: 'Abrir pasta do documento…', cmd: 'openFolderImages' },
           { sep: true },
           { label: 'Salvar', key: 'Ctrl+S', cmd: 'save' },
           { label: 'Salvar como…', key: 'Ctrl+Shift+S', cmd: 'saveAs' },
@@ -779,6 +1246,8 @@
           { label: 'Riscado', key: 'Alt+Shift+5', cmd: 'strike' },
           { label: 'Realçado', cmd: 'highlight' },
           { label: 'Código', key: 'Ctrl+Shift+E', cmd: 'code' },
+          { label: 'Subscrito', cmd: 'sub' },
+          { label: 'Sobrescrito', cmd: 'sup' },
           { label: 'Fórmula na linha', cmd: 'inlineMath' },
           { sep: true },
           { label: 'Citação', key: 'Ctrl+Shift+Q', cmd: 'quote' },
@@ -791,7 +1260,9 @@
           { label: 'Tabela', key: 'Ctrl+T', cmd: 'table' },
           { label: 'Link', key: 'Ctrl+K', cmd: 'link' },
           { label: 'Imagem', key: 'Ctrl+Shift+I', cmd: 'image' },
-          { label: 'Linha horizontal', cmd: 'hr' }
+          { label: 'Linha horizontal', cmd: 'hr' },
+          { sep: true },
+          { label: 'Limpar formatação', cmd: 'clearFormat' }
         ]
       },
       {
@@ -934,7 +1405,7 @@
       var btn = e.target.closest('button');
       if (!btn) return;
 
-      if (btn.dataset.act === 'open-folder') { openFolder(); return; }
+      if (btn.dataset.act === 'open-folder') { openFolder(false); return; }
 
       if (btn.dataset.act === 'recent') { openRecent(Number(btn.dataset.i)); return; }
 
@@ -943,12 +1414,12 @@
         var node = nodes[Number(btn.dataset.i)];
         if (!node) return;
         if (node.kind === 'dir') {
-          if (!node.children) node.children = await readDirectory(node.handle, node.depth + 1);
+          if (!node.children) node.children = await readDirectory(node.handle, node.depth + 1, node.path);
           node.open = !node.open;
           renderFiles();
         } else {
           if (!confirmDiscard()) return;
-          await loadHandle(node.handle);
+          await loadHandle(node.handle, node.path);
         }
         return;
       }
@@ -1153,6 +1624,7 @@
     markDirty(state.text !== state.savedText);
     scheduleRender();
     paintSource();
+    syncHeadingSelect();
     if (state.prefs.autosave) scheduleDraft();
   }
 
@@ -1395,26 +1867,80 @@
     }).join('');
   }
 
-  function buildExportHtml() {
+  function buildExportHtml(fragment) {
     var vars = themeVars() + '--font:' + FONTS[state.prefs.font] + ';';
+    var content = fragment === undefined ? preview.innerHTML : fragment;
     return '<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
       '<title>' + escapeHtml(state.name.replace(/\.(md|markdown|txt)$/i, '')) + '</title>\n' +
       '<style>:root{' + vars + '}\n' + EXPORT_CSS + '\n</style>\n</head>\n<body>\n' +
-      '<article class="doc">\n' + preview.innerHTML + '\n</article>\n</body>\n</html>';
+      '<article class="doc">\n' + content + '\n</article>\n</body>\n</html>';
   }
 
-  function exportHtml() {
-    var html = buildExportHtml();
-    var name = state.name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, '') + '.html';
-    downloadText(html, name, 'text/html;charset=utf-8');
-    toast('HTML exportado: ' + name);
+  function blobToDataUrl(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(reader.error || new Error('Falha ao ler imagem')); };
+      reader.readAsDataURL(blob);
+    });
   }
 
-  function copyHtml() {
-    navigator.clipboard.writeText(preview.innerHTML)
-      .then(function () { toast('HTML do documento copiado.'); })
-      .catch(function () { toast('Não foi possível copiar.'); });
+  async function prepareExportFragment() {
+    var clone = preview.cloneNode(true);
+    var images = $$('img', clone);
+
+    await Promise.all(images.map(async function (img) {
+      var docPath = img.dataset.docPath;
+      var src = img.getAttribute('src') || '';
+      var orig = img.dataset.origSrc || '';
+
+      if (docPath && state.dirHandle) {
+        try {
+          var file = await getFileFromRoot(state.dirHandle, docPath);
+          img.setAttribute('src', await blobToDataUrl(file));
+          return;
+        } catch (e) { /* tenta o blob já carregado */ }
+      }
+
+      if (/^blob:/i.test(src)) {
+        try {
+          var response = await fetch(src);
+          var blob = await response.blob();
+          img.setAttribute('src', await blobToDataUrl(blob));
+          return;
+        } catch (e) { /* mantém a referência original */ }
+      }
+
+      if (img.dataset.imgState === 'missing' && orig) {
+        img.setAttribute('src', orig);
+      }
+    }));
+
+    return clone.innerHTML;
+  }
+
+  async function exportHtml() {
+    toast('Preparando HTML autônomo…');
+    try {
+      var fragment = await prepareExportFragment();
+      var html = buildExportHtml(fragment);
+      var name = state.name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, '') + '.html';
+      downloadText(html, name, 'text/html;charset=utf-8');
+      toast('HTML exportado: ' + name);
+    } catch (e) {
+      toast('Não foi possível exportar o HTML.');
+    }
+  }
+
+  async function copyHtml() {
+    try {
+      var fragment = await prepareExportFragment();
+      await navigator.clipboard.writeText(fragment);
+      toast('HTML do documento copiado.');
+    } catch (e) {
+      toast('Não foi possível copiar.');
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -1485,9 +2011,13 @@
         paintSource();
         centerCaret();
       }
+      syncHeadingSelect();
     });
 
-    editor.addEventListener('click', paintSource);
+    editor.addEventListener('click', function () {
+      paintSource();
+      syncHeadingSelect();
+    });
 
     editor.addEventListener('paste', function (e) {
       var items = (e.clipboardData || {}).items || [];
@@ -1577,7 +2107,30 @@
       if (!b) return;
       var fn = COMMANDS[b.dataset.cmd];
       if (fn) fn();
+      syncHeadingSelect();
     });
+
+    el.toolbar.addEventListener('change', function (e) {
+      if (e.target.id !== 'tb-heading') return;
+      var level = Number(e.target.value);
+      if (level === 0) COMMANDS.h0();
+      else if (COMMANDS['h' + level]) COMMANDS['h' + level]();
+      syncHeadingSelect();
+    });
+
+    /* aviso de imagens relativas */
+    var noticeAction = $('#doc-notice-action');
+    if (noticeAction) noticeAction.addEventListener('click', COMMANDS.openFolderImages);
+    var noticeClose = $('#doc-notice-close');
+    if (noticeClose) {
+      noticeClose.addEventListener('click', function () {
+        state.noticeDismissed = true;
+        var notice = $('#doc-notice');
+        if (notice) notice.hidden = true;
+      });
+    }
+
+    document.addEventListener('fullscreenchange', syncToolbarState);
 
     /* localizar */
     $('#find-input').addEventListener('input', computeMatches);
@@ -1640,6 +2193,7 @@
     loadPrefs();
     buildMenus();
     buildShortcutGrid();
+    buildToolbar();
     wireSidebar();
     wireEvents();
     applyPrefs();
