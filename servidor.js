@@ -70,13 +70,74 @@ const server = http.createServer((req, res) => {
   });
 });
 
+function openBrowser(url) {
+  if (process.env.ILUMINURA_NO_OPEN === '1') return;
+
+  const opener = process.platform === 'win32' ? `start "" "${url}"`
+    : process.platform === 'darwin' ? `open "${url}"`
+    : `xdg-open "${url}"`;
+
+  exec(opener, (err) => {
+    if (err) console.error('Não foi possível abrir o navegador. Acesse: ' + url);
+  });
+}
+
+function isIluminura(url, callback) {
+  let done = false;
+
+  function finish(value) {
+    if (done) return;
+    done = true;
+    callback(value);
+  }
+
+  const request = http.get(url, { timeout: 1800 }, (response) => {
+    let body = '';
+    response.setEncoding('utf8');
+
+    response.on('data', (chunk) => {
+      body += chunk;
+
+      if (body.length > 8192) {
+        finish(response.statusCode === 200 && body.includes('Iluminura'));
+        request.destroy();
+      }
+    });
+
+    response.on('end', () => {
+      finish(response.statusCode === 200 && body.includes('Iluminura'));
+    });
+  });
+
+  request.on('timeout', () => {
+    request.destroy();
+    finish(false);
+  });
+  request.on('error', () => finish(false));
+}
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`\nA porta ${PORT} já está em uso. Tente: node servidor.js ${PORT + 1}\n`);
+    const url = `http://127.0.0.1:${PORT}/`;
+
+    isIluminura(url, (running) => {
+      if (running) {
+        console.log('\n  Iluminura já está em execução.');
+        console.log('  Aberto em: ' + url);
+        console.log('  Abrindo o navegador...\n');
+        openBrowser(url);
+        setTimeout(() => process.exit(0), 600);
+        return;
+      }
+
+      console.error(`\nA porta ${PORT} está em uso por outro programa.`);
+      console.error(`Encerre o outro programa ou use: node servidor.js ${PORT + 1}\n`);
+      process.exit(1);
+    });
   } else {
     console.error(err);
+    process.exit(1);
   }
-  process.exit(1);
 });
 
 server.listen(PORT, '127.0.0.1', () => {
@@ -86,10 +147,5 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('  Aberto em: ' + url);
   console.log('  (Ctrl+C encerra o servidor)\n');
 
-  const opener = process.platform === 'win32' ? `start "" "${url}"`
-    : process.platform === 'darwin' ? `open "${url}"`
-    : `xdg-open "${url}"`;
-
-  if (process.env.ILUMINURA_NO_OPEN === '1') return;
-  exec(opener, () => {});
+  openBrowser(url);
 });

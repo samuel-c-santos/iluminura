@@ -6,6 +6,11 @@ where node >nul 2>nul
 if errorlevel 1 goto semnode
 
 node "servidor.js"
+if errorlevel 1 (
+  echo.
+  echo O servidor encerrou com erro.
+  pause
+)
 goto :eof
 
 :semnode

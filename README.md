@@ -44,6 +44,8 @@ O sistema pode ser executado através de três métodos:
 | Linha de comando direta | `node servidor.js [porta]` | Permite customização da porta de escuta do serviço HTTP estático local. |
 | Carregamento estático | Abrir `index.html` diretamente | Execução em protocolo `file://`. A persistência opera via seletor tradicional de arquivos (Blob/download) e cache via Web Storage API (`localStorage`). A instalação PWA e o service worker não funcionam nesse protocolo. |
 
+O servidor local tenta abrir o navegador automaticamente. Ao executar `iniciar.bat` com o servidor já ativo, o Iluminura detecta a instância existente e abre o navegador no endereço atual. Se a porta estiver ocupada por outro programa, o script mostra o erro e encerra com código de falha.
+
 ---
 
 ## 2. Especificação Funcional
