@@ -46,6 +46,14 @@ O sistema pode ser executado através de três métodos:
 
 O servidor local tenta abrir o navegador automaticamente. Ao executar `iniciar.bat` com o servidor já ativo, o Iluminura detecta a instância existente e abre o navegador no endereço atual. Se a porta estiver ocupada por outro programa, o script mostra o erro e encerra com código de falha.
 
+### Instalação no Windows
+
+Execute `instalar.bat` para criar um atalho chamado **Iluminura** no Menu Iniciar. O atalho aponta para `iniciar.bat`, usa o ícone `assets/icons/iluminura.ico` e abre o navegador ao iniciar o servidor local. Não é necessário executar como administrador; o atalho é criado no perfil do usuário.
+
+O atalho abre uma janela de console com o servidor. Feche essa janela ou use `Ctrl+C` para encerrar o servidor. Para remover o atalho, execute `desinstalar.bat`. A remoção apaga apenas o atalho, não os arquivos do projeto. Se a pasta do aplicativo for movida, execute `instalar.bat` novamente para atualizar o caminho.
+
+A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplicativo. Ela cria um atalho gerenciado pelo navegador; o `instalar.bat` cria um atalho nativo que inicia o servidor local e abre o Iluminura.
+
 ---
 
 ## 2. Especificação Funcional
@@ -172,12 +180,16 @@ iluminura/
 │   ├── style.css           Regras de layout, variáveis de tema e diretivas de impressão
 │   ├── logo.svg            Identificador visual vetorial
 │   ├── docs/               Capturas de tela usadas na documentação
-│   ├── icons/              Ícones de instalação em 192 e 512 pixels
+│   ├── icons/              Ícones de instalação em 192 e 512 pixels e ícone .ico para o Windows
 │   └── vendor/
 │       ├── mermaid.min.js  Biblioteca opcional de diagramas, carregada sob demanda
 │       └── LICENSE-mermaid Licença MIT da biblioteca Mermaid
 ├── servidor.js             Servidor HTTP local minimalista sem módulos externos
 ├── iniciar.bat             Script de inicialização rápida para ambiente Windows
+├── instalar.bat            Cria o atalho Iluminura no Menu Iniciar
+├── instalar.ps1            Implementação PowerShell do instalador do atalho
+├── desinstalar.bat         Remove o atalho do Menu Iniciar
+├── desinstalar.ps1         Implementação PowerShell da remoção do atalho
 ├── exemplo.md              Documento de validação de sintaxe e referência
 ├── testes/
 │   ├── markdown.test.js    Suíte de testes automatizados do analisador

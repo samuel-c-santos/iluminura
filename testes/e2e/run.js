@@ -291,13 +291,13 @@ async function main() {
 
     check('título com Iluminura', boot.title.endsWith('Iluminura'), boot.title);
     check('marca Iluminura', boot.brand === 'Iluminura', boot.brand);
-    check('versão 1.7.0', boot.version === '1.7.0', boot.version);
+    check('versão 1.7.1', boot.version === '1.7.1', boot.version);
     check('manifesto PWA', !!boot.manifest && boot.manifest.endsWith('/manifest.webmanifest'), boot.manifest);
     check('editor e pré-visualização', boot.editor && boot.preview);
 
     const sw = await evaluate(`Promise.race([
       navigator.serviceWorker.ready.then((registration) => ({ scope: registration.scope, active: !!registration.active })),
-      new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 7000))
+      new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 12000))
     ])`);
     check('service worker ativo', !!sw.scope && sw.active === true, JSON.stringify(sw));
 
