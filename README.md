@@ -61,6 +61,7 @@ A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplic
 ### 2.1 Interface e Modos de Operação
 - **Barra de Ferramentas em Faixas**: comandos organizados por contexto (Arquivo, Histórico, Texto, Parágrafo, Inserir e Exibir), no estilo de uma faixa de escritório, com ícones, dicas de atalho e estados ativos.
 - **Barra Lateral Recolhível**: o painel de Esboço, Arquivos, Buscar e Fila pode ser recolhido pelo botão no próprio painel, pelo cabeçalho ou por `Ctrl+Shift+1`; uma aba discreta na borda reabre o painel.
+- **Navegação de Arquivos**: a aba Arquivos lista os documentos `.md` e `.txt` da pasta aberta. Use **Expandir pastas** para revelar subpastas e **Atualizar árvore** para reler arquivos criados ou removidos fora do aplicativo. Ao abrir um único arquivo, o navegador não expõe a pasta; use **Abrir pasta do documento** para liberar os arquivos irmãos.
 - **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
 - **Busca Global**: a aba Buscar localiza texto e nomes de arquivo em toda a pasta aberta, com busca sem acentos e abertura direta no trecho encontrado.
 - **Instalação PWA**: manifesto e service worker permitem instalar o aplicativo e abri-lo offline após a primeira visita. O cache local é atualizado pela rede quando o servidor está disponível.

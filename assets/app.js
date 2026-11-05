@@ -10,7 +10,7 @@
   var Caminhos = window.LeitorCaminhos;
   var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.7.1';
+  var APP_VERSION = '1.7.2';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -1852,12 +1852,56 @@
     return out;
   }
 
+  async function expandAllFolders() {
+    if (!state.fileTree) return;
+
+    var budget = { count: 0 };
+
+    async function walk(nodes) {
+      for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (node.kind !== 'dir' || node.depth >= 6) continue;
+
+        node.children = await readDirectory(node.handle, node.depth + 1, node.path);
+        node.open = true;
+        budget.count += node.children.length;
+        if (budget.count < 500) await walk(node.children);
+      }
+    }
+
+    await walk(state.fileTree);
+    renderFiles();
+    toast('Pastas expandidas.');
+  }
+
+  async function refreshFileTree() {
+    if (!state.dirHandle) return;
+
+    try {
+      state.fileTree = await readDirectory(state.dirHandle, 0, '');
+      renderFiles();
+      toast('Árvore de arquivos atualizada.');
+    } catch (e) {
+      toast('Não foi possível atualizar a árvore de arquivos.');
+    }
+  }
+
   function renderFiles() {
     var body = $('#sidebar-body');
-    var html = '<button class="file-row" data-act="open-folder"><span class="ico">📁</span><span class="nm">Abrir pasta…</span></button>';
+    var html = '<button class="file-row" data-act="open-folder"><span class="ico">📁</span><span class="nm">Abrir pasta do projeto…</span></button>';
 
     if (state.fileTree) {
       html += '<div class="menu-sep"></div>';
+
+      html += '<button class="file-row" data-act="refresh-tree" title="Reler a pasta para mostrar arquivos criados ou removidos">' +
+        '<span class="ico">↻</span><span class="nm">Atualizar árvore</span></button>';
+
+      var hasDirs = flattenTree(state.fileTree).some(function (n) { return n.kind === 'dir'; });
+      if (hasDirs) {
+        html += '<button class="file-row" data-act="expand-folders" title="Abrir todas as subpastas da árvore">' +
+          '<span class="ico">▾</span><span class="nm">Expandir pastas</span></button>';
+      }
+
       var nodes = flattenTree(state.fileTree);
       html += nodes.map(function (n, i) {
         var pad = 8 + n.depth * 14;
@@ -1865,6 +1909,15 @@
         return '<button class="file-row" data-act="tree" data-i="' + i + '" style="padding-left:' + pad + 'px">' +
           '<span class="ico">' + ico + '</span><span class="nm">' + escapeHtml(n.name) + '</span></button>';
       }).join('');
+    } else if (!state.dirHandle) {
+      html += '<div class="sidebar-empty">' +
+        (state.handle
+          ? 'O navegador não permite listar os arquivos irmãos a partir de um único arquivo. Abra a pasta do projeto para ver os outros .md.'
+          : 'Abra a pasta do projeto para navegar por todos os arquivos .md.') +
+        (state.handle
+          ? '<br><button type="button" class="search-action" data-act="open-folder-current">Abrir pasta do documento…</button>'
+          : '') +
+        '</div>';
     }
 
     var recents = getRecents();
@@ -2553,6 +2606,9 @@
       if (!btn) return;
 
       if (btn.dataset.act === 'open-folder') { openFolder(false); return; }
+      if (btn.dataset.act === 'open-folder-current') { openFolder(true); return; }
+      if (btn.dataset.act === 'refresh-tree') { await refreshFileTree(); return; }
+      if (btn.dataset.act === 'expand-folders') { await expandAllFolders(); return; }
 
       if (btn.dataset.act === 'search-clear') {
         var searchInput = $('#global-search-input');
