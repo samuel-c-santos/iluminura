@@ -1,14 +1,24 @@
 $ErrorActionPreference = 'Stop'
 
 $programs = [Environment]::GetFolderPath('Programs')
-$shortcutPath = Join-Path $programs 'Iluminura.lnk'
+$paths = @(
+  (Join-Path $programs 'Iluminura.lnk'),
+  (Join-Path $programs 'Encerrar Iluminura.lnk')
+)
 
-if (Test-Path -LiteralPath $shortcutPath) {
-  Remove-Item -LiteralPath $shortcutPath -Force
+$removed = 0
+
+foreach ($path in $paths) {
+  if (Test-Path -LiteralPath $path) {
+    Remove-Item -LiteralPath $path -Force
+    Write-Host ''
+    Write-Host 'Atalho removido do Menu Iniciar.'
+    Write-Host "  $path"
+    $removed++
+  }
+}
+
+if ($removed -eq 0) {
   Write-Host ''
-  Write-Host 'Atalho removido do Menu Iniciar.'
-  Write-Host "  $shortcutPath"
-} else {
-  Write-Host ''
-  Write-Host 'O atalho nao existe no Menu Iniciar.'
+  Write-Host 'Nenhum atalho do Iluminura foi encontrado no Menu Iniciar.'
 }

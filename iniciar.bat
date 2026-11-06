@@ -2,18 +2,12 @@
 setlocal
 cd /d "%~dp0"
 
-where node >nul 2>nul
-if errorlevel 1 goto semnode
+where wscript >nul 2>nul
+if errorlevel 1 goto semwscript
 
-node "servidor.js"
-if errorlevel 1 (
-  echo.
-  echo O servidor encerrou com erro.
-  pause
-)
+wscript.exe //nologo "%~dp0iniciar.vbs"
 goto :eof
 
-:semnode
-echo Node.js nao encontrado. Abrindo o Iluminura direto no navegador...
-echo Para abrir e salvar pastas, instale o Node.js (https://nodejs.org) e rode este atalho novamente.
-start "" "%~dp0index.html"
+:semwscript
+echo Nao foi possivel iniciar o Iluminura: wscript.exe nao encontrado.
+pause

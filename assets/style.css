@@ -1289,6 +1289,30 @@ body.col-resizing { user-select: none; }
 .statusbar .state.dirty { color: #bf8700; }
 .statusbar .state.saved { color: #2da44e; }
 
+.statusbar .disk-stat {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font: inherit;
+  font-variant-numeric: normal;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.statusbar .disk-stat::before {
+  content: '●';
+  margin-right: 5px;
+  font-size: 9px;
+  vertical-align: 1px;
+  color: var(--fg-faint);
+}
+
+.statusbar .disk-stat.on::before { color: #2da44e; }
+.statusbar .disk-stat.warn::before { color: #bf8700; }
+.statusbar .disk-stat:hover { border-color: var(--border-strong); }
+.statusbar .disk-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .statusbar select {
   background: transparent;
   border: 1px solid transparent;

@@ -1,0 +1,9 @@
+# Controle em tempo de execução do servidor local
+.iluminura.pid
+.iluminura.token
+.iluminura.log
+
+# Sistema e editores
+Thumbs.db
+desktop.ini
+.DS_Store

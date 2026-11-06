@@ -6,7 +6,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0desinstalar.ps1"
 
 if errorlevel 1 (
   echo.
-  echo Nao foi possivel remover o atalho do Menu Iniciar.
+  echo Nao foi possivel remover os atalhos do Menu Iniciar.
   pause
   goto :eof
 )

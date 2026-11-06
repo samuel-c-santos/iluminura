@@ -10,7 +10,7 @@
   var Caminhos = window.LeitorCaminhos;
   var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.7.2';
+  var APP_VERSION = '1.8.0';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -109,6 +109,7 @@
     toast('Iluminura instalado.');
   });
   var diskPollTimer = null;
+  var diskPollTick = 0;
   var diskCheckBusy = false;
 
   /* ------------------------------------------------------------------ *
@@ -265,6 +266,7 @@
     hideDiskNotice();
     resetHistory();
     startDiskWatch();
+    updateDiskStatus();
   }
 
   /* ------------------------------------------------------------------ *
@@ -777,6 +779,33 @@
     return !!(state.handle || (state.dirHandle && state.docPath));
   }
 
+  function updateDiskStatus() {
+    var el = $('#disk-status');
+    if (!el) return;
+
+    var bound = diskBound();
+    var label;
+    var title;
+
+    if (bound) {
+      label = 'vínculo: ' + (state.docPath ? 'pasta' : 'arquivo');
+      title = state.docPath
+        ? 'Monitorando "' + state.docPath + '" dentro da pasta aberta. Alterações externas são verificadas a cada segundo.'
+        : 'Monitorando "' + state.name + '" no disco. Alterações externas são verificadas a cada segundo.';
+    } else if (state.dirHandle) {
+      label = 'documento sem vínculo';
+      title = 'A pasta está aberta, mas este documento não corresponde a um arquivo dela. Use Abrir pasta do documento.';
+    } else {
+      label = 'sem vínculo';
+      title = 'Este documento não está ligado a um arquivo no disco. Abra pelo seletor de arquivos ou pela pasta para detectar alterações externas.';
+    }
+
+    el.textContent = label;
+    el.title = title;
+    el.classList.toggle('on', bound);
+    el.classList.toggle('warn', !bound && !!state.dirHandle);
+  }
+
   function hasLocalEdits() {
     return state.dirty || (!!editor && editor.value !== state.savedText);
   }
@@ -997,21 +1026,58 @@
     if (hadFocus) editor.focus();
   }
 
-  async function refreshDiskStamp() {
+  async function refreshDiskStamp(expectedText) {
     var snap = await readDiskSnapshot();
-    if (snap.status !== 'ok') return;
+
+    if (snap.status === 'missing') {
+      showDiskNotice('missing');
+      return 'missing';
+    }
+
+    if (snap.status !== 'ok') return 'error';
     if (snap.handle) state.handle = snap.handle;
-    state.diskStamp = stampOf(snap.file);
+
+    var stamp = stampOf(snap.file);
+    var diskText = null;
+
+    if (typeof expectedText === 'string') {
+      try {
+        diskText = await snap.file.text();
+      } catch (e) {
+        return 'error';
+      }
+
+      if (diskText !== expectedText) {
+        /* outra escrita aconteceu antes desta leitura: não adota o carimbo */
+        state.diskStamp = stamp;
+        state.diskConflict = true;
+        recordDiskVersion(diskText, stamp);
+
+        if (!hasLocalEdits() && state.prefs.externalMode === 'auto') {
+          applyDiskContent(diskText, snap.file, snap.handle);
+          toast('Documento atualizado do disco.');
+        } else {
+          state.diskNoticeStamp = null;
+          showDiskNotice('changed');
+        }
+
+        return 'external';
+      }
+    }
+
+    state.diskStamp = stamp;
     state.diskNoticeStamp = null;
     state.diskConflict = false;
     hideDiskNotice();
 
     if (state.docPath) {
       try {
-        var diskText = await snap.file.text();
-        setProjectBaseline(state.docPath, diskText, state.diskStamp, snap.handle, state.name);
+        if (diskText === null) diskText = await snap.file.text();
+        setProjectBaseline(state.docPath, diskText, stamp, snap.handle || state.handle, state.name);
       } catch (e) { /* mantém a linha de base anterior */ }
     }
+
+    return 'ok';
   }
 
   async function checkDiskChange(forceCompare) {
@@ -1444,7 +1510,12 @@
 
   function startDiskWatch() {
     stopDiskWatch();
-    if (!diskBound()) return;
+    if (!diskBound()) {
+      updateDiskStatus();
+      return;
+    }
+
+    diskPollTick = 0;
 
     if (typeof window.FileSystemObserver === 'function') {
       try {
@@ -1458,7 +1529,10 @@
     }
 
     diskPollTimer = setInterval(function () {
-      if (document.visibilityState === 'visible') checkDiskChange();
+      if (document.visibilityState !== 'visible') return;
+      diskPollTick++;
+      /* a cada cinco segundos compara o conteúdo mesmo com carimbo igual */
+      checkDiskChange(diskPollTick % 5 === 0);
     }, 1000);
 
     checkDiskChange();
@@ -1709,9 +1783,14 @@
           markDirty(state.text !== content);
           addRecent(state.name, content);
           state.saving = false;
-          await refreshDiskStamp();
+          var diskState = await refreshDiskStamp(content);
           startDiskWatch();
-          toast('Salvo em ' + state.name);
+          updateDiskStatus();
+          if (diskState === 'ok') {
+            toast('Salvo em ' + state.name);
+          } else if (diskState === 'error') {
+            toast('Salvo, mas não foi possível reler o arquivo do disco.');
+          }
           return;
         } catch (err) {
           state.saving = false;
@@ -1816,6 +1895,7 @@
       }
 
       startDiskWatch();
+      updateDiskStatus();
 
       if (!bound && !bind) toast('Pasta aberta: ' + root.name);
     } catch (err) {
@@ -4603,6 +4683,22 @@
     $('#find-close').addEventListener('click', closeFind);
 
     /* seletores da barra de status */
+    $('#disk-status').addEventListener('click', function () {
+      if (diskBound()) {
+        toast(state.docPath
+          ? 'Alterações externas em "' + state.docPath + '" são verificadas automaticamente.'
+          : 'Alterações externas em "' + state.name + '" são verificadas automaticamente.');
+        return;
+      }
+
+      if (state.handle || state.dirHandle) {
+        openFolder(true);
+        return;
+      }
+
+      openFile();
+    });
+
     $('#theme-select').addEventListener('change', function (e) { setPref('theme', e.target.value); });
     $('#reading-speed').addEventListener('change', function (e) {
       setPref('speed', Number(e.target.value));
