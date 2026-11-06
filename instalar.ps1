@@ -2,18 +2,12 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $launcher = Join-Path $root 'iniciar.vbs'
-$stopper = Join-Path $root 'parar.bat'
 $icon = Join-Path $root 'assets\icons\iluminura.ico'
 $programs = [Environment]::GetFolderPath('Programs')
 $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
 
 if (-not (Test-Path -LiteralPath $launcher)) {
   Write-Error "Arquivo nao encontrado: $launcher"
-  exit 1
-}
-
-if (-not (Test-Path -LiteralPath $stopper)) {
-  Write-Error "Arquivo nao encontrado: $stopper"
   exit 1
 }
 
@@ -42,32 +36,18 @@ if (Test-Path -LiteralPath $icon) {
 
 $shortcut.Save()
 
-$stopPath = Join-Path $programs 'Encerrar Iluminura.lnk'
-$stopShortcut = $shell.CreateShortcut($stopPath)
-$stopShortcut.TargetPath = $stopper
-$stopShortcut.WorkingDirectory = $root
-$stopShortcut.Description = 'Encerra o servidor local do Iluminura'
-$stopShortcut.WindowStyle = 7
-
-if (Test-Path -LiteralPath $icon) {
-  $stopShortcut.IconLocation = "$icon,0"
+$legacyStop = Join-Path $programs 'Encerrar Iluminura.lnk'
+if (Test-Path -LiteralPath $legacyStop) {
+  Remove-Item -LiteralPath $legacyStop -Force
 }
-
-$stopShortcut.Save()
 
 if (-not (Test-Path -LiteralPath $shortcutPath)) {
   Write-Error 'Nao foi possivel criar o atalho do Iluminura.'
   exit 1
 }
 
-if (-not (Test-Path -LiteralPath $stopPath)) {
-  Write-Error 'Nao foi possivel criar o atalho de encerramento.'
-  exit 1
-}
-
 Write-Host ''
-Write-Host 'Atalhos criados no Menu Iniciar:'
+Write-Host 'Atalho criado no Menu Iniciar:'
 Write-Host "  $shortcutPath"
-Write-Host "  $stopPath"
 Write-Host ''
-Write-Host 'Use "Iluminura" para iniciar e "Encerrar Iluminura" para parar o servidor.'
+Write-Host 'Use "Iluminura" para iniciar. Para encerrar, use Ajuda > Encerrar servidor no proprio aplicativo.'

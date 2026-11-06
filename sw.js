@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const CACHE = 'iluminura-v1.8.0';
+const CACHE = 'iluminura-v1.8.1';
 const CORE = [
   './',
   './index.html',
@@ -36,6 +36,12 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(
         keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))
       ))
+      .then(() => caches.open(CACHE))
+      .then((cache) => cache.keys().then((requests) => Promise.all(
+        requests
+          .filter((request) => new URL(request.url).pathname.startsWith('/__iluminura/'))
+          .map((request) => cache.delete(request))
+      )))
       .then(() => self.clients.claim())
   );
 });
@@ -48,6 +54,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+  if (url.pathname.startsWith('/__iluminura/')) return;
   if (url.pathname.endsWith('/sw.js')) return;
 
   event.respondWith(

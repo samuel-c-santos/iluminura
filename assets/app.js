@@ -10,7 +10,7 @@
   var Caminhos = window.LeitorCaminhos;
   var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.8.0';
+  var APP_VERSION = '1.8.1';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -64,6 +64,7 @@
     diskHistory: null,
     review: null,
     saving: false,
+    serverActive: false,
     dirty: false,
     headings: [],
     lastRender: 0,
@@ -2251,7 +2252,8 @@
     prefs: function () { openModal('modal-prefs'); },
     shortcuts: function () { openModal('modal-shortcuts'); },
     installApp: installApp,
-    about: function () { openModal('modal-about'); }
+    about: function () { openModal('modal-about'); },
+    stopServer: requestServerStop
   };
 
   /* --------------------------------------------------------- toolbar -- */
@@ -2559,6 +2561,7 @@
           { sep: true },
           { label: 'Instalar aplicativo', cmd: 'installApp' },
           { sep: true },
+          { label: 'Encerrar servidor…', cmd: 'stopServer', disabled: !state.serverActive, hint: 'Disponível quando o aplicativo está sendo servido pelo servidor local.' },
           { label: 'Sobre o Iluminura', cmd: 'about' }
         ]
       }
@@ -2621,6 +2624,7 @@
       b.type = 'button';
       b.className = 'menu-item';
       if (item.disabled) b.disabled = true;
+      if (item.hint) b.title = item.hint;
 
       var checked = item.checked ? !!item.checked() : false;
       b.innerHTML = '<span class="check">' + (checked ? '✓' : '') + '</span>' +
@@ -4385,6 +4389,77 @@
     }
   }
 
+  async function detectLocalServer() {
+    if (location.protocol === 'file:') {
+      state.serverActive = false;
+      return;
+    }
+
+    try {
+      var response = await fetch('/__iluminura/status', { cache: 'no-store' });
+      if (!response.ok) {
+        state.serverActive = false;
+        return;
+      }
+
+      var data = await response.json();
+      state.serverActive = !!(data && data.app === 'iluminura' && data.stoppable);
+    } catch (e) {
+      state.serverActive = false;
+    }
+  }
+
+  function requestServerStop() {
+    if (!state.serverActive) {
+      toast('O servidor local não está disponível nesta sessão.');
+      return;
+    }
+
+    var warning = $('#stop-server-warning');
+    if (warning) warning.hidden = !hasLocalEdits();
+    openModal('modal-stop-server');
+  }
+
+  async function stopLocalServer() {
+    var button = $('#stop-server-confirm');
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Encerrando…';
+    }
+
+    try {
+      saveDraftNow();
+
+      var tokenResponse = await fetch('/__iluminura/stop-token', {
+        cache: 'no-store',
+        headers: { 'X-Iluminura-Client': 'app' }
+      });
+
+      if (!tokenResponse.ok) throw new Error('token');
+      var tokenData = await tokenResponse.json();
+      if (!tokenData || !tokenData.token) throw new Error('token');
+
+      var response = await fetch('/__iluminura/stop', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'X-Iluminura-Stop': tokenData.token }
+      });
+
+      if (!response.ok) throw new Error('stop');
+
+      state.serverActive = false;
+      closeModal('modal-stop-server');
+      openModal('modal-server-stopped');
+    } catch (e) {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Encerrar servidor';
+      }
+      toast('Não foi possível encerrar o servidor local.');
+    }
+  }
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
@@ -4746,6 +4821,8 @@
       b.addEventListener('click', function () { closeModal(b.dataset.close); });
     });
 
+    $('#stop-server-confirm').addEventListener('click', stopLocalServer);
+
     $$('.modal-backdrop').forEach(function (bd) {
       bd.addEventListener('click', function (e) {
         if (e.target === bd) bd.classList.remove('on');
@@ -4826,6 +4903,7 @@
     renderNow();
     paintSource();
     registerServiceWorker();
+    detectLocalServer();
   }
 
   if (document.readyState === 'loading') {

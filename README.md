@@ -46,15 +46,15 @@ O sistema pode ser executado através de três métodos:
 
 O launcher oculto grava o PID em `.iluminura.pid` e um token de encerramento em `.iluminura.token`. O servidor não expõe esses arquivos pela rede. Ao executar `iniciar.bat` com o servidor já ativo, o Iluminura detecta a instância existente e abre o navegador no endereço atual. Se a porta estiver ocupada por outro programa, uma caixa de mensagem informa o conflito.
 
-Para encerrar, execute `parar.bat` ou o atalho **Encerrar Iluminura** no Menu Iniciar. O comando usa o token para desligar o servidor e, se necessário, confirma o processo pelo PID antes de encerrá-lo.
+Para encerrar, use **Ajuda > Encerrar servidor…** na interface. O comando confirma a ação, avisa sobre alterações não salvas e desliga o servidor pelo token local. O `parar.bat` continua disponível como alternativa quando a interface não estiver acessível.
 
 ### Instalação no Windows
 
-Execute `instalar.bat` para criar dois atalhos no Menu Iniciar: **Iluminura** e **Encerrar Iluminura**. O primeiro aponta para `iniciar.vbs` por meio de `wscript.exe` e não abre janela de console; o segundo executa `parar.bat`. Ambos usam o ícone `assets/icons/iluminura.ico`. Não é necessário executar como administrador; os atalhos são criados no perfil do usuário.
+Execute `instalar.bat` para criar o atalho **Iluminura** no Menu Iniciar. O atalho aponta para `iniciar.vbs` por meio de `wscript.exe` e não abre janela de console. Ele usa o ícone `assets/icons/iluminura.ico`. Não é necessário executar como administrador; o atalho é criado no perfil do usuário.
 
-O servidor permanece ativo em segundo plano enquanto o navegador estiver em uso. `parar.bat` encerra o processo de forma direta e remove os arquivos de controle. Para remover os atalhos, execute `desinstalar.bat`. A remoção apaga apenas os atalhos, não os arquivos do projeto. Se a pasta do aplicativo for movida, execute `instalar.bat` novamente para atualizar o caminho.
+O servidor permanece ativo em segundo plano enquanto o navegador estiver em uso. Para encerrar, abra **Ajuda > Encerrar servidor…** no aplicativo. A ação pede confirmação e, se houver edições não salvas, mostra um aviso antes de continuar. O `parar.bat` pode ser usado como alternativa em uma janela de terminal. Para remover o atalho, execute `desinstalar.bat`; a remoção apaga apenas o atalho, não os arquivos do projeto. Se a pasta do aplicativo for movida, execute `instalar.bat` novamente para atualizar o caminho.
 
-A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplicativo. Ela cria um atalho gerenciado pelo navegador; o `instalar.bat` cria atalhos nativos que iniciam e encerram o servidor local.
+A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplicativo. Ela cria um atalho gerenciado pelo navegador; o `instalar.bat` cria o atalho nativo que inicia e mantém o servidor local.
 
 ---
 
@@ -67,6 +67,7 @@ A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplic
 - **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
 - **Busca Global**: a aba Buscar localiza texto e nomes de arquivo em toda a pasta aberta, com busca sem acentos e abertura direta no trecho encontrado.
 - **Instalação PWA**: manifesto e service worker permitem instalar o aplicativo e abri-lo offline após a primeira visita. O cache local é atualizado pela rede quando o servidor está disponível.
+- **Encerramento do Servidor**: o comando **Ajuda > Encerrar servidor…** pede confirmação, avisa sobre alterações não salvas e desliga o servidor local. A opção fica desabilitada quando o aplicativo é aberto sem o servidor integrado.
 - **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica) e modo Código-Fonte puro.
 - **Estruturação de Documento**: Extração e renderização dinâmica do índice hierárquico (TOC) com suporte a níveis de cabeçalho `H1` a `H6`.
 - **Métricas Textuais**: Contagem em tempo real de palavras, caracteres totais, caracteres sem espaço, linhas e parágrafos. Estimativa de tempo de leitura configurável (120, 240 ou 382 palavras por minuto).
@@ -193,12 +194,12 @@ iluminura/
 ├── servidor.js             Servidor HTTP local minimalista sem módulos externos
 ├── iniciar.bat             Inicia o servidor em segundo plano pelo Windows Script Host
 ├── iniciar.vbs             Launcher oculto que executa o servidor sem janela de console
-├── parar.bat               Encerra o servidor local e remove os arquivos de controle
+├── parar.bat               Alternativa de encerramento quando a interface não está acessível
 ├── encerrar.js             Encerramento autenticado por token, com conferência de PID
-├── instalar.bat            Cria os atalhos Iluminura e Encerrar Iluminura no Menu Iniciar
-├── instalar.ps1            Implementação PowerShell do instalador dos atalhos
-├── desinstalar.bat         Remove os atalhos do Menu Iniciar
-├── desinstalar.ps1         Implementação PowerShell da remoção dos atalhos
+├── instalar.bat            Cria o atalho Iluminura no Menu Iniciar
+├── instalar.ps1            Implementação PowerShell do instalador do atalho
+├── desinstalar.bat         Remove o atalho do Menu Iniciar
+├── desinstalar.ps1         Implementação PowerShell da remoção do atalho
 ├── .gitignore              Ignora os arquivos de controle do servidor
 ├── exemplo.md              Documento de validação de sintaxe e referência
 ├── testes/
@@ -208,7 +209,8 @@ iluminura/
 │   ├── servidor.test.js    Ciclo de vida do servidor e encerramento autenticado
 │   └── e2e/
 │       ├── run.js          Testes de integração no navegador
-│       └── externo.js      Alterações externas durante o uso e durante o salvamento
+│       ├── externo.js      Alterações externas durante o uso e durante o salvamento
+│       └── servidor-ui.js  Encerramento do servidor pela interface
 └── LICENSE                 Termos da licença MIT
 ```
 
@@ -225,15 +227,18 @@ node testes/diff.test.js
 node testes/servidor.test.js
 node testes/e2e/run.js
 node testes/e2e/externo.js
+node testes/e2e/servidor-ui.js
 ```
 
 A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, 15 asserções de resolução de caminhos relativos e 15 asserções do diff de linhas.
 
-O teste de ciclo de vida do servidor inicia uma instância isolada, valida PID e token, recusa métodos e tokens inválidos, confirma que os arquivos de controle não são servidos pela rede, encerra o processo e verifica que um PID estranho não é afetado. São 12 verificações.
+O teste de ciclo de vida do servidor inicia uma instância isolada, valida PID e token, recusa métodos, origens, hosts e tokens inválidos, confirma que os arquivos de controle não são servidos pela rede, encerra o processo e verifica que um PID estranho não é afetado. São 17 verificações.
 
-O teste E2E principal requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas, fila de revisão do projeto e abertura offline. Atualmente são 40 verificações.
+O teste E2E principal requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas, fila de revisão do projeto, exclusão das rotas de controle no cache e abertura offline. Atualmente são 41 verificações.
 
-O teste de alterações externas usa o servidor em `http://127.0.0.1:8731/` e simula um agente gravando no arquivo enquanto o documento está aberto e durante o salvamento. Ele também confere o indicador de vínculo na barra de status. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
+O teste de alterações externas usa o servidor em `http://127.0.0.1:8731/` e simula um agente gravando no arquivo enquanto o documento está aberto e durante o salvamento. Ele também confere o indicador de vínculo na barra de status.
+
+O teste da interface de encerramento inicia um servidor isolado, abre o aplicativo, aciona **Ajuda > Encerrar servidor…**, confere o aviso de alterações não salvas, confirma o desligamento e valida que a opção fica desabilitada depois. O executável do navegador pode ser indicado pela variável `CHROME_PATH`.
 
 ---
 

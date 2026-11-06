@@ -168,12 +168,66 @@ function serveStatic(pathname, res) {
   });
 }
 
+function isLocalRequest(req) {
+  if (req.headers['x-iluminura-client'] !== 'app') return false;
+
+  const host = String(req.headers.host || '').toLowerCase();
+  const expectedHosts = [`127.0.0.1:${PORT}`, `localhost:${PORT}`];
+  if (expectedHosts.indexOf(host) === -1) return false;
+
+  const origin = req.headers.origin;
+  if (origin && origin !== `http://127.0.0.1:${PORT}` && origin !== `http://localhost:${PORT}`) {
+    return false;
+  }
+
+  const site = req.headers['sec-fetch-site'];
+  if (site && site !== 'same-origin' && site !== 'none') return false;
+
+  return true;
+}
+
+function sendJson(res, status, payload) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(JSON.stringify(payload));
+}
+
 const server = http.createServer((req, res) => {
   let pathname;
   try {
     pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
   } catch (e) {
     res.writeHead(400).end('Requisição inválida');
+    return;
+  }
+
+  if (pathname === '/__iluminura/status') {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8', 'Allow': 'GET' });
+      res.end('Método não permitido');
+      return;
+    }
+
+    sendJson(res, 200, { app: 'iluminura', stoppable: true });
+    return;
+  }
+
+  if (pathname === '/__iluminura/stop-token') {
+    if (req.method !== 'GET') {
+      res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8', 'Allow': 'GET' });
+      res.end('Método não permitido');
+      return;
+    }
+
+    if (!isLocalRequest(req)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Acesso negado');
+      return;
+    }
+
+    sendJson(res, 200, { token: STOP_TOKEN });
     return;
   }
 
@@ -190,12 +244,8 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    res.writeHead(200, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store'
-    });
-    res.end('{"ok":true}');
-    setTimeout(function () { shutdown(0); }, 150);
+    sendJson(res, 200, { ok: true });
+    setTimeout(function () { shutdown(0); }, 500);
     return;
   }
 

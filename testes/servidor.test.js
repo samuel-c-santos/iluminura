@@ -119,6 +119,33 @@ async function main() {
     const index = await request('GET', '/');
     check('pagina principal servida', index.status === 200 && index.body.includes('Iluminura'), index.status);
 
+    const status = await request('GET', '/__iluminura/status');
+    let statusData = {};
+    try { statusData = JSON.parse(status.body); } catch (e) { /* resposta invalida */ }
+    check('status identifica o servidor', status.status === 200 && statusData.app === 'iluminura' && statusData.stoppable === true, status.status);
+
+    const tokenNoHeader = await request('GET', '/__iluminura/stop-token');
+    check('token exige cabecalho do aplicativo', tokenNoHeader.status === 403, tokenNoHeader.status);
+
+    const tokenWrongOrigin = await request('GET', '/__iluminura/stop-token', {
+      'X-Iluminura-Client': 'app',
+      'Origin': 'http://malicioso.test'
+    });
+    check('token recusa origem externa', tokenWrongOrigin.status === 403, tokenWrongOrigin.status);
+
+    const tokenWrongHost = await request('GET', '/__iluminura/stop-token', {
+      'X-Iluminura-Client': 'app',
+      'Host': 'malicioso.test'
+    });
+    check('token recusa host externo', tokenWrongHost.status === 403, tokenWrongHost.status);
+
+    const tokenResponse = await request('GET', '/__iluminura/stop-token', {
+      'X-Iluminura-Client': 'app'
+    });
+    let tokenData = {};
+    try { tokenData = JSON.parse(tokenResponse.body); } catch (e) { /* resposta invalida */ }
+    check('token disponivel para a interface', tokenResponse.status === 200 && tokenData.token === token, tokenResponse.status);
+
     const getStop = await request('GET', '/__iluminura/stop');
     check('GET na rota de parada recusado', getStop.status === 405, getStop.status);
 

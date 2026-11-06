@@ -291,7 +291,7 @@ async function main() {
 
     check('título com Iluminura', boot.title.endsWith('Iluminura'), boot.title);
     check('marca Iluminura', boot.brand === 'Iluminura', boot.brand);
-    check('versão 1.8.0', boot.version === '1.8.0', boot.version);
+    check('versão 1.8.1', boot.version === '1.8.1', boot.version);
     check('manifesto PWA', !!boot.manifest && boot.manifest.endsWith('/manifest.webmanifest'), boot.manifest);
     check('editor e pré-visualização', boot.editor && boot.preview);
 
@@ -311,6 +311,7 @@ async function main() {
     })`);
     check('cache offline essencial', cached.includes('/index.html') && cached.includes('/assets/app.js') &&
       cached.includes('/assets/exportar.js'));
+    check('controle do servidor fora do cache', !cached.some((pathName) => pathName.startsWith('/__iluminura/')));
 
     const demoDiagram = await waitFor(() => evaluate(`(() => {
       const block = document.querySelector('.mermaid-block');

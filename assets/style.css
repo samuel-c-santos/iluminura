@@ -1448,6 +1448,15 @@ body.col-resizing { user-select: none; }
 
 .review-warning[hidden] { display: none; }
 
+.server-stop-note {
+  margin: 0 0 12px;
+  color: var(--fg-dim);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.server-stop-note b { color: var(--fg); }
+
 .review-toolbar {
   display: flex;
   justify-content: flex-end;
