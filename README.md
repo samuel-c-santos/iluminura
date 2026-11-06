@@ -1,5 +1,7 @@
 # Iluminura
 
+[Português](README.md) · [English](README.en.md)
+
 Aplicativo web local e autônomo para leitura, escrita e renderização de documentos Markdown. Implementado em JavaScript puro, com o núcleo sem dependências e uma única biblioteca opcional empacotada localmente para diagramas Mermaid.
 
 O projeto inclui um fluxo de revisão de alterações externas, pensado para documentos editados por agentes de IA no terminal.
