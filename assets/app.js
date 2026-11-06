@@ -10,7 +10,7 @@
   var Caminhos = window.LeitorCaminhos;
   var Diff = window.IluminuraDiff;
 
-  var APP_VERSION = '1.8.1';
+  var APP_VERSION = '1.9.0';
   /* chaves históricas mantidas para preservar preferências e rascunhos */
   var LS_PREFS = 'leitormd.prefs.v1';
   var LS_DRAFT = 'leitormd.draft.v1';
@@ -4904,6 +4904,9 @@
     paintSource();
     registerServiceWorker();
     detectLocalServer();
+    setInterval(function () {
+      if (document.visibilityState === 'visible') detectLocalServer();
+    }, 5000);
   }
 
   if (document.readyState === 'loading') {

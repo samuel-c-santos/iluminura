@@ -2,6 +2,7 @@
 .iluminura.pid
 .iluminura.token
 .iluminura.log
+.iluminura-bandeja.log
 
 # Sistema e editores
 Thumbs.db

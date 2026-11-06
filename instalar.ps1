@@ -27,7 +27,7 @@ $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $wscript
 $shortcut.Arguments = '"' + $launcher + '"'
 $shortcut.WorkingDirectory = $root
-$shortcut.Description = 'Iluminura: leitor e editor Markdown local'
+$shortcut.Description = 'Iluminura: abre o aplicativo e mantem o icone na bandeja do sistema'
 $shortcut.WindowStyle = 1
 
 if (Test-Path -LiteralPath $icon) {
@@ -50,4 +50,4 @@ Write-Host ''
 Write-Host 'Atalho criado no Menu Iniciar:'
 Write-Host "  $shortcutPath"
 Write-Host ''
-Write-Host 'Use "Iluminura" para iniciar. Para encerrar, use Ajuda > Encerrar servidor no proprio aplicativo.'
+Write-Host 'Use "Iluminura" para iniciar. O icone permanece na bandeja do sistema; clique com o botao direito para abrir, parar o servidor ou sair.'

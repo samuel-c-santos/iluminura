@@ -18,5 +18,4 @@ If nodeOk <> 0 Then
   WScript.Quit
 End If
 
-shell.Environment("PROCESS")("ILUMINURA_HIDDEN") = "1"
-shell.Run "cmd /c node ""servidor.js""", 0, False
+shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -Sta -WindowStyle Hidden -File """ & folder & "\bandeja.ps1""", 0, False

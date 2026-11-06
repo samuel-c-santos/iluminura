@@ -40,19 +40,23 @@ O sistema pode ser executado através de três métodos:
 
 | Método | Execução | Características Técnicas |
 | --- | --- | --- |
-| Servidor local integrado | Executar `iniciar.bat` (ou `iniciar.vbs`) | Inicia o servidor em segundo plano, sem janela de console, e abre a interface em `http://127.0.0.1:8731`. Habilita acesso completo à File System Access API para manipulação direta de arquivos e pastas no disco. |
+| Servidor local integrado | Executar `iniciar.bat` (ou `iniciar.vbs`) | Inicia o ícone na bandeja do sistema, o servidor em segundo plano e a interface em `http://127.0.0.1:8731`. Habilita acesso completo à File System Access API para manipulação direta de arquivos e pastas no disco. |
 | Linha de comando direta | `node servidor.js [porta]` | Permite acompanhar o log no terminal e customizar a porta de escuta do serviço HTTP estático local. |
 | Carregamento estático | Abrir `index.html` diretamente | Execução em protocolo `file://`. A persistência opera via seletor tradicional de arquivos (Blob/download) e cache via Web Storage API (`localStorage`). A instalação PWA e o service worker não funcionam nesse protocolo. |
 
-O launcher oculto grava o PID em `.iluminura.pid` e um token de encerramento em `.iluminura.token`. O servidor não expõe esses arquivos pela rede. Ao executar `iniciar.bat` com o servidor já ativo, o Iluminura detecta a instância existente e abre o navegador no endereço atual. Se a porta estiver ocupada por outro programa, uma caixa de mensagem informa o conflito.
+O launcher inicia o ícone do Iluminura na bandeja do sistema e o servidor em segundo plano, sem janela de console. O menu do ícone oferece **Abrir Iluminura**, **Iniciar servidor** ou **Parar servidor**, **Abrir pasta do aplicativo** e **Sair**. Ao executar o atalho com o aplicativo já ativo, o Iluminura abre o navegador e mantém uma única instância da bandeja. Se a porta estiver ocupada por outro programa, uma caixa de mensagem informa o conflito.
 
-Para encerrar, use **Ajuda > Encerrar servidor…** na interface. O comando confirma a ação, avisa sobre alterações não salvas e desliga o servidor pelo token local. O `parar.bat` continua disponível como alternativa quando a interface não estiver acessível.
+O servidor grava o PID em `.iluminura.pid` e um token de encerramento em `.iluminura.token`. O servidor não expõe esses arquivos pela rede. Para encerrar, use o menu da bandeja ou **Ajuda > Encerrar servidor…** na interface. O comando confirma a ação, avisa sobre alterações não salvas e desliga o servidor pelo token local. O `parar.bat` continua disponível como alternativa quando a interface não estiver acessível.
 
 ### Instalação no Windows
 
-Execute `instalar.bat` para criar o atalho **Iluminura** no Menu Iniciar. O atalho aponta para `iniciar.vbs` por meio de `wscript.exe` e não abre janela de console. Ele usa o ícone `assets/icons/iluminura.ico`. Não é necessário executar como administrador; o atalho é criado no perfil do usuário.
+Execute `instalar.bat` para criar o atalho **Iluminura** no Menu Iniciar. O atalho aponta para `iniciar.vbs` por meio de `wscript.exe`, inicia o ícone na bandeja, o servidor local e abre o navegador. Ele usa o ícone `assets/icons/iluminura.ico`. Não é necessário executar como administrador; o atalho é criado no perfil do usuário.
 
-O servidor permanece ativo em segundo plano enquanto o navegador estiver em uso. Para encerrar, abra **Ajuda > Encerrar servidor…** no aplicativo. A ação pede confirmação e, se houver edições não salvas, mostra um aviso antes de continuar. O `parar.bat` pode ser usado como alternativa em uma janela de terminal. Para remover o atalho, execute `desinstalar.bat`; a remoção apaga apenas o atalho, não os arquivos do projeto. Se a pasta do aplicativo for movida, execute `instalar.bat` novamente para atualizar o caminho.
+O servidor permanece ativo em segundo plano enquanto o ícone estiver na bandeja. Clique com o botão direito no ícone para abrir o aplicativo, iniciar ou parar o servidor, abrir a pasta do aplicativo ou sair. A opção **Sair** encerra o servidor e remove o ícone. Fechar a aba do navegador não encerra o servidor.
+
+No Windows 11, o ícone pode ficar na área de overflow da bandeja. Arraste-o para a área visível ou use o menu de ícones ocultos para mantê-lo sempre acessível.
+
+A ação **Ajuda > Encerrar servidor…** no aplicativo também desliga o servidor. Nesse caso, o ícone da bandeja continua disponível e pode iniciar o servidor novamente. Para remover o atalho, execute `desinstalar.bat`; a remoção apaga apenas o atalho, não os arquivos do projeto. Se a pasta do aplicativo for movida, execute `instalar.bat` novamente para atualizar o caminho.
 
 A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplicativo. Ela cria um atalho gerenciado pelo navegador; o `instalar.bat` cria o atalho nativo que inicia e mantém o servidor local.
 
@@ -67,6 +71,7 @@ A instalação PWA pelo navegador continua disponível em Ajuda > Instalar aplic
 - **Divisão Ajustável**: arraste o divisor central para redimensionar editor e pré-visualização dentro de limites mínimos de cada lado; duplo clique restaura 50% e as setas do teclado ajustam o divisor focado.
 - **Busca Global**: a aba Buscar localiza texto e nomes de arquivo em toda a pasta aberta, com busca sem acentos e abertura direta no trecho encontrado.
 - **Instalação PWA**: manifesto e service worker permitem instalar o aplicativo e abri-lo offline após a primeira visita. O cache local é atualizado pela rede quando o servidor está disponível.
+- **Bandeja do Sistema**: o atalho Iluminura mantém um ícone na bandeja do Windows. O menu abre o aplicativo, inicia ou para o servidor, abre a pasta do aplicativo e encerra tudo.
 - **Encerramento do Servidor**: o comando **Ajuda > Encerrar servidor…** pede confirmação, avisa sobre alterações não salvas e desliga o servidor local. A opção fica desabilitada quando o aplicativo é aberto sem o servidor integrado.
 - **Modos de Exibição**: Painel duplo sincronizado (Editor e Pré-visualização), modo exclusivo de Leitura (com formatação tipográfica) e modo Código-Fonte puro.
 - **Estruturação de Documento**: Extração e renderização dinâmica do índice hierárquico (TOC) com suporte a níveis de cabeçalho `H1` a `H6`.
@@ -192,21 +197,23 @@ iluminura/
 │       ├── mermaid.min.js  Biblioteca opcional de diagramas, carregada sob demanda
 │       └── LICENSE-mermaid Licença MIT da biblioteca Mermaid
 ├── servidor.js             Servidor HTTP local minimalista sem módulos externos
-├── iniciar.bat             Inicia o servidor em segundo plano pelo Windows Script Host
-├── iniciar.vbs             Launcher oculto que executa o servidor sem janela de console
+├── iniciar.bat             Inicia a bandeja e o servidor pelo Windows Script Host
+├── iniciar.vbs             Launcher oculto que abre o ícone da bandeja do sistema
+├── bandeja.ps1             Ícone da bandeja, menu de controle e ciclo do servidor
 ├── parar.bat               Alternativa de encerramento quando a interface não está acessível
 ├── encerrar.js             Encerramento autenticado por token, com conferência de PID
 ├── instalar.bat            Cria o atalho Iluminura no Menu Iniciar
 ├── instalar.ps1            Implementação PowerShell do instalador do atalho
 ├── desinstalar.bat         Remove o atalho do Menu Iniciar
 ├── desinstalar.ps1         Implementação PowerShell da remoção do atalho
-├── .gitignore              Ignora os arquivos de controle do servidor
+├── .gitignore              Ignora os arquivos de controle e logs de execução
 ├── exemplo.md              Documento de validação de sintaxe e referência
 ├── testes/
 │   ├── markdown.test.js    Suíte de testes automatizados do analisador
 │   ├── caminhos.test.js    Testes de resolução de caminhos relativos
 │   ├── diff.test.js        Testes do diff de linhas
 │   ├── servidor.test.js    Ciclo de vida do servidor e encerramento autenticado
+│   ├── bandeja.test.js     Autoteste do ciclo da bandeja e do servidor
 │   └── e2e/
 │       ├── run.js          Testes de integração no navegador
 │       ├── externo.js      Alterações externas durante o uso e durante o salvamento
@@ -225,6 +232,7 @@ node testes/markdown.test.js
 node testes/caminhos.test.js
 node testes/diff.test.js
 node testes/servidor.test.js
+node testes/bandeja.test.js
 node testes/e2e/run.js
 node testes/e2e/externo.js
 node testes/e2e/servidor-ui.js
@@ -233,6 +241,8 @@ node testes/e2e/servidor-ui.js
 A rotina unitária avalia 31 asserções do analisador, cobrindo processamento de blocos, regras de inline, tabelas GFM, renderização matemática, blocos Mermaid, sanitização contra injeção de script e isolamento de links maliciosos, 15 asserções de resolução de caminhos relativos e 15 asserções do diff de linhas.
 
 O teste de ciclo de vida do servidor inicia uma instância isolada, valida PID e token, recusa métodos, origens, hosts e tokens inválidos, confirma que os arquivos de controle não são servidos pela rede, encerra o processo e verifica que um PID estranho não é afetado. São 17 verificações.
+
+O teste da bandeja executa o autoteste do script PowerShell em uma porta isolada: inicia o servidor, confere o status, cria o ícone, encerra e valida que o processo terminou. O teste é exclusivo do Windows e é ignorado nos demais sistemas.
 
 O teste E2E principal requer Node.js 22 ou superior e Chrome ou Edge instalado. Ele inicia um servidor local temporário, abre o navegador em modo headless e verifica inicialização, PWA, Mermaid, desfazer e refazer, busca global, exportação DOCX e EPUB, impressão, revisão de alterações externas, fila de revisão do projeto, exclusão das rotas de controle no cache e abertura offline. Atualmente são 41 verificações.
 
@@ -252,6 +262,7 @@ O teste da interface de encerramento inicia um servidor isolado, abre o aplicati
 - **Busca Global**: a varredura da pasta limita a profundidade a 6 níveis e o total a 800 entradas, 24 MB de conteúdo e 150 resultados. Pastas ocultas e `node_modules` são ignoradas.
 - **Exportação DOCX e EPUB**: a conversão preserva a estrutura textual, listas, tabelas, links, blocos de código, imagens e diagramas, mas não reproduz integralmente o CSS da pré-visualização. Fórmulas matemáticas são exportadas como texto e recursos interativos de diagramas não são mantidos.
 - **Requisitos de Sistema de Arquivos**: O gerenciamento recursivo de diretórios locais, a resolução de imagens relativas e a sincronização com alterações externas dependem da compatibilidade com a File System Access API (disponível em navegadores baseados no motor Chromium). Sem ela, imagens relativas continuam dependendo do caminho servido pelo navegador.
+- **Bandeja do Sistema**: o ícone e os atalhos nativos são exclusivos do Windows. Em outros sistemas, execute `node servidor.js` e encerre com `Ctrl+C`. No Windows 11, o ícone pode ficar na área de overflow da bandeja.
 - **Vínculo para Atualização Externa**: a sincronização exige um identificador de arquivo ou pasta concedido pela File System Access API. Documentos abertos pelo seletor clássico de arquivos, por rascunho ou por conteúdo colado não têm vínculo com o disco. A barra de status indica **sem vínculo** nesses casos; abra o arquivo pelo seletor do sistema ou pela pasta para habilitar a detecção.
 - **Desempenho de Realce**: Documentos que excedem o limiar de 2.500 linhas têm a camada de realce do editor temporariamente desativada durante a digitação para preservar a taxa de quadros e a responsividade da entrada.
 

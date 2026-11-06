@@ -291,7 +291,7 @@ async function main() {
 
     check('título com Iluminura', boot.title.endsWith('Iluminura'), boot.title);
     check('marca Iluminura', boot.brand === 'Iluminura', boot.brand);
-    check('versão 1.8.1', boot.version === '1.8.1', boot.version);
+    check('versão 1.9.0', boot.version === '1.9.0', boot.version);
     check('manifesto PWA', !!boot.manifest && boot.manifest.endsWith('/manifest.webmanifest'), boot.manifest);
     check('editor e pré-visualização', boot.editor && boot.preview);
 

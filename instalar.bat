@@ -13,5 +13,5 @@ if errorlevel 1 (
 
 echo.
 echo Atalho "Iluminura" criado no Menu Iniciar.
-echo Para encerrar o servidor, use Ajuda ^> Encerrar servidor no aplicativo.
+echo O icone permanece na bandeja do sistema; clique com o botao direito para abrir, parar o servidor ou sair.
 pause
