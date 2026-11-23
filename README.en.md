@@ -10,7 +10,7 @@ It also works as a local Markdown editor and reader, with live preview, document
 
 ## Quick start
 
-Requires Node.js.
+The local server requires Node.js. As an alternative, open `index.html` directly in the browser, with no server.
 
 ```bash
 git clone https://github.com/samuel-c-santos/iluminura.git
@@ -18,7 +18,7 @@ cd iluminura
 node servidor.js
 ```
 
-Open [http://127.0.0.1:8731](http://127.0.0.1:8731) in the browser. In the interface, open `exemplo.md` to try the editor and the preview.
+Open [http://127.0.0.1:8731](http://127.0.0.1:8731) in the browser. The interface already opens with a sample document, ready for editing and preview.
 
 On Windows, you can also start the app with `iniciar.bat`. To create a Start Menu shortcut, run `instalar.bat`.
 

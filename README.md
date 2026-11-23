@@ -10,7 +10,7 @@ Também funciona como editor e leitor Markdown local, com pré-visualização, b
 
 ## Início rápido
 
-Requer Node.js.
+O servidor local requer Node.js. Como alternativa, abra `index.html` diretamente no navegador, sem servidor.
 
 ```bash
 git clone https://github.com/samuel-c-santos/iluminura.git
@@ -18,7 +18,7 @@ cd iluminura
 node servidor.js
 ```
 
-Abra [http://127.0.0.1:8731](http://127.0.0.1:8731) no navegador. Na interface, abra `exemplo.md` para experimentar o editor e a pré-visualização.
+Abra [http://127.0.0.1:8731](http://127.0.0.1:8731) no navegador. A interface já abre com um documento de exemplo, pronto para edição e pré-visualização.
 
 No Windows, você também pode iniciar o aplicativo com `iniciar.bat`. Para criar um atalho no Menu Iniciar, execute `instalar.bat`.
 
