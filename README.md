@@ -2,11 +2,35 @@
 
 [Português](README.md) · [English](README.en.md)
 
-Aplicativo web local e autônomo para leitura, escrita e renderização de documentos Markdown. Implementado em JavaScript puro, com o núcleo sem dependências e uma única biblioteca opcional empacotada localmente para diagramas Mermaid.
+**Revise visualmente as alterações que agentes de IA fazem nos seus documentos Markdown.**
 
-O projeto inclui um fluxo de revisão de alterações externas, pensado para documentos editados por agentes de IA no terminal.
+O agente continua trabalhando no terminal. O Iluminura acompanha os arquivos no disco e mostra as mudanças em uma interface de leitura e edição, para que você possa revisar cada trecho e decidir o que manter.
 
-![Iluminura](assets/logo.svg)
+Também funciona como editor e leitor Markdown local, com pré-visualização, busca em arquivos e exportação. O processamento e os documentos permanecem no seu computador. O aplicativo não envia documentos a serviços remotos nem faz telemetria; o navegador se comunica com o servidor local.
+
+## Início rápido
+
+Requer Node.js.
+
+```bash
+git clone https://github.com/samuel-c-santos/iluminura.git
+cd iluminura
+node servidor.js
+```
+
+Abra [http://127.0.0.1:8731](http://127.0.0.1:8731) no navegador. Na interface, abra `exemplo.md` para experimentar o editor e a pré-visualização.
+
+No Windows, você também pode iniciar o aplicativo com `iniciar.bat`. Para criar um atalho no Menu Iniciar, execute `instalar.bat`.
+
+## Recursos em destaque
+
+- Acompanhe alterações feitas por agentes de IA ou outros programas e revise-as por trechos.
+- Edite Markdown com pré-visualização, busca de documentos e recursos de escrita.
+- Exporte documentos para HTML, DOCX, EPUB ou PDF.
+
+O aplicativo é implementado em JavaScript. O Mermaid é distribuído localmente e carregado quando um documento contém diagramas.
+
+![Iluminura](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/05fM5pn478pBu1x1OOZKNw-images_1795395827144_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvbG9nbw.svg?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94LzA1Zk01cG40NzhwQnUxeDFPT1pLTnctaW1hZ2VzXzE3OTUzOTU4MjcxNDRfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdmJHOW5idy5zdmciLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTcyOTI4MDB9fX1dfQ__&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQC-QztZZeYI4JkOwh2lF-Ls00u015TfDXngmqqnXJUrHAIgXkK~8JuLLB~u1dl2KoArbQsAZjevhekScAI~aAH69~E_)
 
 ---
 
@@ -14,27 +38,27 @@ O projeto inclui um fluxo de revisão de alterações externas, pensado para doc
 
 ### Interface
 
-![Interface do Iluminura em modo dividido, com faixa de ferramentas, editor e pré-visualização](assets/docs/interface.png)
+![Interface do Iluminura em modo dividido, com faixa de ferramentas, editor e pré-visualização](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/05fM5pn478pBu1x1OOZKNw-images_1795395827144_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9pbnRlcmZhY2U.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94LzA1Zk01cG40NzhwQnUxeDFPT1pLTnctaW1hZ2VzXzE3OTUzOTU4MjcxNDRfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTlwYm5SbGNtWmhZMlUucG5nIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzk3MjkyODAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQCDqq6sLlYmWkDZehe4hVLvhkF0BiR6aaO6SHRct1zs6gIgBClUpyZOn8VAu~LVAhOtQOuFm68r16P8xinO3abj0cU_)
 
 Modo dividido com faixa de ferramentas, editor Markdown, pré-visualização renderizada e painel de esboço.
 
 ### Fila de revisão do projeto
 
-![Fila de revisão com arquivos alterados pelo agente](assets/docs/fila.png)
+![Fila de revisão com arquivos alterados pelo agente](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/05fM5pn478pBu1x1OOZKNw-images_1795395827144_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9maWxh.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94LzA1Zk01cG40NzhwQnUxeDFPT1pLTnctaW1hZ2VzXzE3OTUzOTU4MjcxNDRfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTltYVd4aC5wbmciLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTcyOTI4MDB9fX1dfQ__&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQDc3-574IM4pHvvYXauZK-NOo6RUI0exgMGIt5zfiflYQIgdg5zLDwwGvSMkr4novBBxZwBwchk2MS6wu5wQ9Z0448_)
 
 Arquivos alterados no projeto, com número de trechos, linhas adicionadas e removidas e horário da detecção.
 
 ### Revisão por trechos
 
-![Revisão de alterações externas com diff e histórico](assets/docs/revisao.png)
+![Revisão de alterações externas com diff e histórico](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/05fM5pn478pBu1x1OOZKNw-images_1795395827144_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9yZXZpc2Fv.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94LzA1Zk01cG40NzhwQnUxeDFPT1pLTnctaW1hZ2VzXzE3OTUzOTU4MjcxNDRfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTl5WlhacGMyRnYucG5nIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzk3MjkyODAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQDfVXvz7qyvyM6VBrY2A14jVN8que8aISqLlB0rfbc1cgIgOQ~WUjoO1RxyvhYp9iHrsMVEyZxQiZ9ryQ7EV1g-ya8_)
 
 Diff por trechos, seleção individual, histórico de versões externas e ações para aplicar ou manter a versão local.
 
 ---
 
-## 1. Visão Geral
+## 1. Execução e instalação
 
-O **Iluminura** opera inteiramente no ambiente do cliente (navegador web), mantendo o processamento e o armazenamento de arquivos no sistema local do usuário. O projeto não realiza requisições de rede, telemetria ou integração com serviços em nuvem. A biblioteca Mermaid é servida localmente e carregada apenas quando o documento contém diagramas.
+O processamento da aplicação e o armazenamento dos documentos ocorrem localmente. O servidor HTTP atende apenas em `127.0.0.1`. O projeto não envia documentos a serviços remotos, não integra serviços em nuvem e não realiza telemetria. A biblioteca Mermaid é servida localmente e carregada apenas quando o documento contém diagramas.
 
 ### Arquitetura de Execução
 
