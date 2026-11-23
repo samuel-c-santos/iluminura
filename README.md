@@ -20,6 +20,8 @@ node servidor.js
 
 Abra [http://127.0.0.1:8731](http://127.0.0.1:8731) no navegador. A interface já abre com um documento de exemplo, pronto para edição e pré-visualização.
 
+Para acompanhar arquivos no disco e carregar imagens locais, use um navegador baseado em Chromium, como Chrome ou Edge.
+
 No Windows, você também pode iniciar o aplicativo com `iniciar.bat`. Para criar um atalho no Menu Iniciar, execute `instalar.bat`.
 
 ## Recursos em destaque

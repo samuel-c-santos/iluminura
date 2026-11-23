@@ -20,6 +20,8 @@ node servidor.js
 
 Open [http://127.0.0.1:8731](http://127.0.0.1:8731) in the browser. The interface already opens with a sample document, ready for editing and preview.
 
+To track files on disk and load local images, use a Chromium-based browser such as Chrome or Edge.
+
 On Windows, you can also start the app with `iniciar.bat`. To create a Start Menu shortcut, run `instalar.bat`.
 
 ## Highlights
