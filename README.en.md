@@ -10,7 +10,7 @@ It also works as a local Markdown editor and reader, with live preview, document
 
 ## Quick start
 
-The local server requires Node.js. As an alternative, open `index.html` directly in the browser, with no server.
+The command below starts the local server and requires Node.js.
 
 ```bash
 git clone https://github.com/samuel-c-santos/iluminura.git
