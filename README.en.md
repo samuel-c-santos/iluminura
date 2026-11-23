@@ -2,9 +2,33 @@
 
 [Português](README.md) · **English**
 
-A local-first, self-contained web app for reading, writing, and rendering Markdown documents. Built in plain JavaScript, with a dependency-free core and a single optional library bundled locally for Mermaid diagrams.
+**Review visually the changes AI agents make to your Markdown documents.**
 
-Iluminura also ships a review workflow for external changes, designed for documents edited by AI agents in the terminal.
+The agent keeps working in the terminal. Iluminura watches the files on disk and shows the changes in a reading and editing interface, so you can review each hunk and decide what to keep.
+
+It also works as a local Markdown editor and reader, with live preview, document search, and export. Processing and documents stay on your computer. The app does not send documents to remote services or collect telemetry; the browser talks only to the local server.
+
+## Quick start
+
+Requires Node.js.
+
+```bash
+git clone https://github.com/samuel-c-santos/iluminura.git
+cd iluminura
+node servidor.js
+```
+
+Open [http://127.0.0.1:8731](http://127.0.0.1:8731) in the browser. In the interface, open `exemplo.md` to try the editor and the preview.
+
+On Windows, you can also start the app with `iniciar.bat`. To create a Start Menu shortcut, run `instalar.bat`.
+
+## Highlights
+
+- Track changes made by AI agents or other programs and review them hunk by hunk.
+- Edit Markdown with live preview, document search, and writing tools.
+- Export documents to HTML, DOCX, EPUB, or PDF.
+
+The app is implemented in JavaScript. Mermaid is bundled locally and loaded when a document contains diagrams.
 
 ![Iluminura](assets/logo.svg)
 
@@ -31,12 +55,6 @@ Files changed in the project, with hunk count, added and removed lines, and dete
 Line diff grouped into hunks, individual selection, external version history, and actions to apply or keep the local version.
 
 ---
-
-## Why
-
-AI agents are good at editing Markdown in the terminal. Reviewing what they changed is the hard part: dozens of files, long diffs, and no safe way to accept only part of the result.
-
-Iluminura is the visual layer for that loop. Open a folder, let the agent work, and review each change hunk by hunk before it lands in your document.
 
 ## Features
 
@@ -119,7 +137,7 @@ The built-in parser implements the common subset of CommonMark and GitHub Flavor
 - **System tray**: the Iluminura shortcut keeps an icon in the Windows tray. Its menu opens the app, starts or stops the server, opens the app folder, and exits.
 - **Server shutdown**: **Help > Shut down server…** asks for confirmation, warns about unsaved changes, and shuts down the local server. The option is disabled when the app runs without the integrated server.
 
-## Install
+## Running and installing
 
 ### Windows
 
@@ -173,6 +191,7 @@ Iluminura does not replace the terminal or the agent. It provides the visual lay
 | Toggle source view | `Ctrl + /` |
 | Toggle focus mode | `Ctrl + Shift + F` |
 | Toggle sidebar | `Ctrl + Shift + 1` |
+| Adjust panel split | `←` / `→` with the divider focused |
 | Toggle toolbar | `Ctrl + Shift + T` |
 | Reload from disk | `F5` |
 | Insert code block | `Ctrl + Shift + K` |
