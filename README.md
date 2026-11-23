@@ -30,7 +30,7 @@ No Windows, você também pode iniciar o aplicativo com `iniciar.bat`. Para cria
 
 O aplicativo é implementado em JavaScript. O Mermaid é distribuído localmente e carregado quando um documento contém diagramas.
 
-![Iluminura](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/ZFUgBN8rF4S549VC5BkwqL-images_1795396509776_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvbG9nbw.svg?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94L1pGVWdCTjhyRjRTNTQ5VkM1Qmt3cUwtaW1hZ2VzXzE3OTUzOTY1MDk3NzZfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdmJHOW5idy5zdmciLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTcyOTI4MDB9fX1dfQ__&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEQCIFkeeRpACtUTETaniPJbUw5deCwZExDEqF-cDblv6bfwAiACqXAFW1M0CORmx-E~9BfZNU2xK2ZvFKGrJcDLuuFgaw__)
+![Iluminura](assets/logo.svg)
 
 ---
 
@@ -38,19 +38,19 @@ O aplicativo é implementado em JavaScript. O Mermaid é distribuído localmente
 
 ### Interface
 
-![Interface do Iluminura em modo dividido, com faixa de ferramentas, editor e pré-visualização](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/ZFUgBN8rF4S549VC5BkwqL-images_1795396509776_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9pbnRlcmZhY2U.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94L1pGVWdCTjhyRjRTNTQ5VkM1Qmt3cUwtaW1hZ2VzXzE3OTUzOTY1MDk3NzZfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTlwYm5SbGNtWmhZMlUucG5nIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzk3MjkyODAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQDuJN-g3idVjX89t-Wv6xAkpT1EV~3fSv5maOtDMQVurwIgJvDQfXvBsm2EPLZ3JQ63phyEcmG6TKbxxYjXXKocRUE_)
+![Interface do Iluminura em modo dividido, com faixa de ferramentas, editor e pré-visualização](assets/docs/interface.png)
 
 Modo dividido com faixa de ferramentas, editor Markdown, pré-visualização renderizada e painel de esboço.
 
 ### Fila de revisão do projeto
 
-![Fila de revisão com arquivos alterados pelo agente](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/ZFUgBN8rF4S549VC5BkwqL-images_1795396509776_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9maWxh.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94L1pGVWdCTjhyRjRTNTQ5VkM1Qmt3cUwtaW1hZ2VzXzE3OTUzOTY1MDk3NzZfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTltYVd4aC5wbmciLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTcyOTI4MDB9fX1dfQ__&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEUCIQCDR-obDceP-EifC19kJapsGzG2w1gPnK~kcrk-DNn2jgIgA8nTi-tOxBpQMuMVirq-2KxCiccIfc1TSl~hf7ffIGE_)
+![Fila de revisão com arquivos alterados pelo agente](assets/docs/fila.png)
 
 Arquivos alterados no projeto, com número de trechos, linhas adicionadas e removidas e horário da detecção.
 
 ### Revisão por trechos
 
-![Revisão de alterações externas com diff e histórico](https://private-us-east-1.manuscdn.com/sessionFile/CFzwCVv3BqDSFX8RbBnCAY/sandbox/ZFUgBN8rF4S549VC5BkwqL-images_1795396509776_na1fn_L2hvbWUvdWJ1bnR1L2lsdW1pbnVyYS9hc3NldHMvZG9jcy9yZXZpc2Fv.png?Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wcml2YXRlLXVzLWVhc3QtMS5tYW51c2Nkbi5jb20vc2Vzc2lvbkZpbGUvQ0Z6d0NWdjNCcURTRlg4UmJCbkNBWS9zYW5kYm94L1pGVWdCTjhyRjRTNTQ5VkM1Qmt3cUwtaW1hZ2VzXzE3OTUzOTY1MDk3NzZfbmExZm5fTDJodmJXVXZkV0oxYm5SMUwybHNkVzFwYm5WeVlTOWhjM05sZEhNdlpHOWpjeTl5WlhacGMyRnYucG5nIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzk3MjkyODAwfX19XX0_&Key-Pair-Id=K2QY5QTL8JSY6C&Signature=MEQCIGdWRJGNaKsDriOYoeAcTBboxWGW6v6HjJOLU0AoaXhmAiAQn~y3BlyFWQni4RbdYdyAtf~lQGo-nOr2GilibT2IjA__)
+![Revisão de alterações externas com diff e histórico](assets/docs/revisao.png)
 
 Diff por trechos, seleção individual, histórico de versões externas e ações para aplicar ou manter a versão local.
 
