@@ -206,6 +206,8 @@ The app does not replace the terminal or the agent. It provides the visual layer
 
 ```
 iluminura/
+├── README.md               Main documentation in Portuguese
+├── README.en.md            Documentation in English
 ├── index.html              User interface and panel structure
 ├── manifest.webmanifest    Web app installation metadata
 ├── sw.js                   Cache and offline service worker

@@ -206,6 +206,8 @@ O aplicativo não substitui o terminal nem o agente. Ele oferece a camada visual
 
 ```
 iluminura/
+├── README.md               Documentação principal em português
+├── README.en.md            Documentação em inglês
 ├── index.html              Interface gráfica do usuário e estrutura dos painéis
 ├── manifest.webmanifest    Metadados de instalação do aplicativo web
 ├── sw.js                   Service worker de cache e funcionamento offline
